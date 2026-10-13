@@ -1,0 +1,296 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  /* Taskora palette — warm, Indian, no white / black / blue */
+  --color-neem: #173f30;
+  --color-neem-deep: #11332a;
+  --color-neem-soft: #24543f;
+  --color-haldi: #f2b33d;
+  --color-saffron: #e8622a;
+  --color-paper: #fce7b2;
+  --color-paper-deep: #f3d488;
+  --color-kumkum: #b23a48;
+  --color-tulsi: #7dbe8f;
+  --color-moss: #4e6b57;
+  --color-sage: #c9d8b8;
+
+  --font-display: var(--font-anek);
+  --font-body: var(--font-mukta);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-mukta);
+  --font-mono: var(--font-mukta);
+  --font-heading: var(--font-anek);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: #fce7b2;
+  --foreground: #173f30;
+  --card: #fbe0a0;
+  --card-foreground: #173f30;
+  --popover: #fbe0a0;
+  --popover-foreground: #173f30;
+  --primary: #173f30;
+  --primary-foreground: #fce7b2;
+  --secondary: #f3d488;
+  --secondary-foreground: #173f30;
+  --muted: #f3d488;
+  --muted-foreground: #4e6b57;
+  --accent: #f2b33d;
+  --accent-foreground: #173f30;
+  --destructive: #b23a48;
+  --border: #e6c374;
+  --input: #e6c374;
+  --ring: #e8622a;
+  --chart-1: #e8622a;
+  --chart-2: #f2b33d;
+  --chart-3: #7dbe8f;
+  --chart-4: #b23a48;
+  --chart-5: #24543f;
+  --radius: 0.75rem;
+  --sidebar: #f8dc98;
+  --sidebar-foreground: #173f30;
+  --sidebar-primary: #173f30;
+  --sidebar-primary-foreground: #fce7b2;
+  --sidebar-accent: #f3d488;
+  --sidebar-accent-foreground: #173f30;
+  --sidebar-border: #e6c374;
+  --sidebar-ring: #e8622a;
+}
+
+/* Dark surfaces stay green, never black */
+.dark {
+  --background: #173f30;
+  --foreground: #fce7b2;
+  --card: #1d4a39;
+  --card-foreground: #fce7b2;
+  --popover: #1d4a39;
+  --popover-foreground: #fce7b2;
+  --primary: #f2b33d;
+  --primary-foreground: #173f30;
+  --secondary: #24543f;
+  --secondary-foreground: #fce7b2;
+  --muted: #24543f;
+  --muted-foreground: #c9d8b8;
+  --accent: #24543f;
+  --accent-foreground: #fce7b2;
+  --destructive: #e07a85;
+  --border: #fce7b222;
+  --input: #fce7b233;
+  --ring: #f2b33d;
+  --chart-1: #e8622a;
+  --chart-2: #f2b33d;
+  --chart-3: #7dbe8f;
+  --chart-4: #e07a85;
+  --chart-5: #c9d8b8;
+  --sidebar: #12342a;
+  --sidebar-foreground: #fce7b2;
+  --sidebar-primary: #f2b33d;
+  --sidebar-primary-foreground: #173f30;
+  --sidebar-accent: #24543f;
+  --sidebar-accent-foreground: #fce7b2;
+  --sidebar-border: #fce7b222;
+  --sidebar-ring: #f2b33d;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-size: 1.0625rem;
+    line-height: 1.6;
+  }
+  ::selection {
+    background: var(--color-haldi);
+    color: var(--color-neem);
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-saffron);
+    outline-offset: 3px;
+  }
+}
+
+/* Display type: Anek's width axis carries the voice → structure idea */
+@utility display-wide {
+  font-family: var(--font-anek), var(--font-mukta), sans-serif;
+  font-stretch: 122%;
+  font-weight: 760;
+  letter-spacing: -0.02em;
+  line-height: 0.95;
+}
+@utility display-narrow {
+  font-family: var(--font-anek), var(--font-mukta), sans-serif;
+  font-stretch: 76%;
+  font-weight: 640;
+  letter-spacing: -0.005em;
+  line-height: 0.95;
+}
+@utility display {
+  font-family: var(--font-anek), var(--font-mukta), sans-serif;
+  font-stretch: 108%;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.02;
+}
+
+/* Waveform bars in the voice demo */
+@keyframes wave {
+  0%,
+  100% {
+    transform: scaleY(0.18);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+@keyframes ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+}
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+.wave-bar {
+  transform: scaleY(0.18);
+  transform-origin: center;
+  transition: transform 0.3s ease;
+}
+[data-wave="on"] .wave-bar {
+  animation: wave 0.9s ease-in-out infinite;
+}
+.mic-ring {
+  animation: ring 1.4s ease-out infinite;
+}
+.typing-caret::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: currentColor;
+  animation: caret 0.8s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  [data-wave="on"] .wave-bar,
+  .mic-ring,
+  .typing-caret::after {
+    animation: none;
+  }
+  [data-wave="on"] .wave-bar {
+    transform: scaleY(0.6);
+  }
+}
+
+/* ── Hero: petals ───────────────────────────── */
+@keyframes petal-breeze {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--dx), var(--dy), 0) rotate(var(--rot));
+    opacity: 0;
+  }
+}
+@keyframes petal-fall {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  35% {
+    transform: translate3d(calc(var(--dx) * 0.9), calc(var(--dy) * 0.3), 0) rotate(calc(var(--rot) * 0.4));
+  }
+  65% {
+    transform: translate3d(calc(var(--dx) * -0.3), calc(var(--dy) * 0.65), 0) rotate(calc(var(--rot) * 0.75));
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(calc(var(--dx) * 0.5), var(--dy), 0) rotate(var(--rot));
+    opacity: 0;
+  }
+}
+
+.petal {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 60% 0 60% 60%;
+  animation: petal-fall var(--dur, 3s) cubic-bezier(0.35, 0.1, 0.45, 1) forwards;
+  will-change: transform, opacity;
+}
+.petal-breeze {
+  animation-name: petal-breeze;
+  animation-timing-function: ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .petal {
+    display: none;
+  }
+}
