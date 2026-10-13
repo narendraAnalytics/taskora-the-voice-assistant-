@@ -19,7 +19,7 @@ const mukta = Mukta({
 export const metadata: Metadata = {
   title: "Taskora — the voice assistant for internship teams",
   description:
-    "Interns give 20-second voice standups in Telugu, Hindi or English. Organizers ask who's behind and get the answer aloud. Taskora keeps the board up to date.",
+    "Interns give 20-second voice standups. Organizers ask who's behind and get the answer aloud. Taskora keeps the board up to date.",
 };
 
 export const viewport: Viewport = {

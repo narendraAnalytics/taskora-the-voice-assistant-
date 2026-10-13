@@ -1,68 +1,14 @@
 import { Check } from "lucide-react";
 import { Commands } from "@/components/landing/commands";
 import { Hero } from "@/components/landing/hero";
-import { Logo } from "@/components/landing/logo";
+import { HowItWorks } from "@/components/landing/how-it-works";
+import { SiteFooter } from "@/components/landing/site-footer";
 import { SiteNav } from "@/components/landing/site-nav";
+import { StaleSection } from "@/components/landing/stale-section";
+import { Roles } from "@/components/landing/roles";
 import { pilotMailto } from "@/lib/site";
 
 const wrap = "mx-auto w-full max-w-[1200px] px-4 sm:px-6 lg:px-8";
-
-const PROBLEMS = [
-  {
-    title: "Organizers chase updates",
-    body: "Hours go into calls and chats asking the same question: where are you on this?",
-  },
-  {
-    title: "Boards drift out of date",
-    body: "Interns forget to move their cards, so the board still shows last week.",
-  },
-  {
-    title: "Blockers surface days late",
-    body: "A stuck intern waits for the next meeting instead of saying so today.",
-  },
-  {
-    title: "Talking is easier than typing",
-    body: "Twenty seconds of speaking beats five minutes of typing, especially in your own language.",
-  },
-];
-
-const STEPS = [
-  {
-    title: "Speak",
-    body: "Hold the mic and talk the way you would to a teammate.",
-  },
-  {
-    title: "Transcribe",
-    body: "Sarvam Saaras v3 turns Telugu, Hindi, English or mixed speech into text.",
-  },
-  {
-    title: "Understand",
-    body: "Taskora works out the action, the person, the task and the date. If a name is unclear, it asks.",
-  },
-  {
-    title: "Confirm",
-    body: "Reassignments and bulk changes show a card first. Questions go straight to the answer.",
-  },
-  {
-    title: "Update and reply",
-    body: "The board changes for the whole team, and the answer is spoken back with Sarvam Bulbul v3.",
-  },
-];
-
-const ROLES = [
-  {
-    title: "Organizers and mentors",
-    body: "See allocated, pending and finished work at a glance. Assign, reassign and move deadlines by voice. Know who is stuck before the weekly call.",
-  },
-  {
-    title: "Interns and fellows",
-    body: "Hear today's tasks in the morning. Give your update by speaking for twenty seconds. Raise a blocker without waiting for a meeting.",
-  },
-  {
-    title: "Program admins",
-    body: "Attendance, weekly reports, mentor feedback and end-of-internship evaluations for a whole batch, in one place.",
-  },
-];
 
 const RULES = [
   "Reassignments and bulk changes always show a confirm card.",
@@ -115,64 +61,31 @@ export default function Home() {
 
       <main>
         {/* Problems */}
-        <section className="bg-paper py-20 lg:py-28">
-          <div className={`${wrap} grid gap-12 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-20`}>
-            <h2 className="display max-w-[16ch] text-[clamp(2.1rem,4.6vw,3.6rem)] text-neem">
-              Status goes stale because typing updates is a chore.
-            </h2>
-            <dl className="grid gap-x-10 gap-y-9 sm:grid-cols-2">
-              {PROBLEMS.map((p) => (
-                <div key={p.title} className="border-t-2 border-neem pt-4">
-                  <dt className="display text-xl text-neem">{p.title}</dt>
-                  <dd className="mt-2 text-moss">{p.body}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        </section>
+        <StaleSection />
 
-        {/* How it works — a real sequence, so it is numbered */}
-        <section id="how" className="scroll-mt-6 bg-paper pb-20 lg:pb-28">
-          <div className={wrap}>
-            <div className="rounded-[2rem] bg-paper-deep/70 px-5 py-12 sm:px-10 lg:px-14 lg:py-16">
-              <h2 className="display max-w-[22ch] text-[clamp(2rem,4vw,3.2rem)] text-neem">
-                How a spoken update reaches the board
-              </h2>
-              <ol className="mt-12 grid gap-8 md:grid-cols-5 md:gap-6">
-                {STEPS.map((s, i) => (
-                  <li key={s.title} className="relative">
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`grid size-11 shrink-0 place-items-center rounded-full display text-lg ${
-                          i === STEPS.length - 1 ? "bg-saffron text-neem" : "bg-neem text-paper"
-                        }`}
-                      >
-                        {i + 1}
-                      </span>
-                      {i < STEPS.length - 1 && (
-                        <span aria-hidden className="hidden h-0.5 flex-1 bg-neem/25 md:block" />
-                      )}
-                    </div>
-                    <h3 className="display mt-4 text-xl text-neem">{s.title}</h3>
-                    <p className="mt-1.5 text-[0.98rem] text-moss">{s.body}</p>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          </div>
-        </section>
+        {/* How it works — pinned showcase, scrubbed by scroll */}
+        <HowItWorks />
 
         {/* Commands */}
-        <section id="commands" data-nav="dark" className="scroll-mt-0 bg-neem py-20 text-paper lg:py-28">
+        <section
+          id="commands"
+          data-nav="dark"
+          className="relative isolate scroll-mt-0 overflow-hidden bg-neem py-20 text-paper lg:py-28"
+        >
+          {/* slow aurora + dot grid behind the console */}
+          <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+            <div className="aurora absolute -left-40 -top-40 size-[36rem] rounded-full bg-saffron/25 blur-3xl" />
+            <div className="aurora absolute -bottom-48 -right-40 size-[40rem] rounded-full bg-haldi/20 blur-3xl [animation-delay:-9s]" />
+            <div className="absolute inset-0 bg-[radial-gradient(#fce7b21f_1px,transparent_1px)] [background-size:24px_24px] [mask-image:radial-gradient(ellipse_at_center,#173f30_30%,transparent_75%)]" />
+          </div>
           <div className={wrap}>
             <div className="max-w-[44rem]">
               <h2 className="display text-[clamp(2.1rem,4.6vw,3.6rem)]">
                 Say it the way you&apos;d say it to a teammate
               </h2>
               <p className="mt-5 text-lg text-sage">
-                Half Telugu, half English is normal here. Sarvam&apos;s code-mixed transcription keeps
-                each word in the script it was spoken in, and Taskora understands the sentence as a
-                whole.
+                No commands to memorize. Ask in plain sentences, the way you would ask a teammate, and
+                Taskora works out who, what and when.
               </p>
             </div>
             <div className="mt-12">
@@ -182,21 +95,17 @@ export default function Home() {
         </section>
 
         {/* Roles */}
-        <section className="bg-paper py-20 lg:py-28">
+        <section id="roles" className="scroll-mt-6 bg-paper py-20 lg:py-28">
           <div className={wrap}>
             <h2 className="display max-w-[20ch] text-[clamp(2.1rem,4.6vw,3.6rem)] text-neem">
               Built for the people who run intern batches
             </h2>
-            <div className="mt-14 grid gap-10 md:grid-cols-3 md:gap-0">
-              {ROLES.map((r) => (
-                <div
-                  key={r.title}
-                  className="md:border-l-2 md:border-haldi md:px-8 md:first:border-l-0 md:first:pl-0"
-                >
-                  <h3 className="display text-2xl text-neem">{r.title}</h3>
-                  <p className="mt-3 text-moss">{r.body}</p>
-                </div>
-              ))}
+            <p className="mt-4 max-w-[38rem] text-lg text-moss">
+              One voice assistant, three views of the same board. Hover or tap a role to see what it
+              gets.
+            </p>
+            <div className="mt-12">
+              <Roles />
             </div>
           </div>
         </section>
@@ -302,28 +211,7 @@ export default function Home() {
         </section>
       </main>
 
-      <footer data-nav="dark" className="bg-neem py-12 text-sage">
-        <div className={`${wrap} flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between`}>
-          <div>
-            <Logo />
-            <p className="mt-3 max-w-[30rem]">
-              A voice assistant for internship programs and small teams, made in India.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-x-6 gap-y-2">
-            <a href="#how" className="hover:text-paper">
-              How it works
-            </a>
-            <a href="#commands" className="hover:text-paper">
-              What you can say
-            </a>
-            <a href="#pricing" className="hover:text-paper">
-              Pricing
-            </a>
-            <span>&copy; 2026 Taskora</span>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </>
   );
 }

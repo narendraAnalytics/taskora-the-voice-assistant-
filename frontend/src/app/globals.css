@@ -242,6 +242,33 @@
   }
 }
 
+/* ── Commands: self-playing console ─────────── */
+@keyframes cmd-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes aurora {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(6rem, 3rem, 0) scale(1.15);
+  }
+}
+.aurora {
+  animation: aurora 18s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aurora {
+    animation: none;
+  }
+}
+
 /* ── Hero: petals ───────────────────────────── */
 @keyframes petal-breeze {
   0% {

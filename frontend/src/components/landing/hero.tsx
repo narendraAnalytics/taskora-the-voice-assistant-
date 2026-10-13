@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { pilotMailto } from "@/lib/site";
 
@@ -39,13 +40,37 @@ export function Hero() {
   const [ready, setReady] = useState(false);
   const [petals, setPetals] = useState<Petal[]>([]);
   const [breeze, setBreeze] = useState(false);
+  const [canReplay, setCanReplay] = useState(false);
+  const [replaying, setReplaying] = useState(false);
+  const skipRef = useRef<HTMLButtonElement>(null);
 
   const reveal = useCallback(() => {
     if (readyRef.current) return;
     readyRef.current = true;
     setReady(true);
+    setReplaying(false);
     if (!prefersReducedMotion()) officeRef.current?.play().catch(() => {});
   }, []);
+
+  /* "Watch again": fade the office scene out and play the intro from the start. */
+  const replay = useCallback(() => {
+    const intro = introRef.current;
+    if (!intro) return;
+    readyRef.current = false;
+    setReady(false);
+    setReplaying(true);
+    setBreeze(false);
+    officeRef.current?.pause();
+    intro.currentTime = 0;
+    intro.play().catch(reveal);
+  }, [reveal]);
+
+  useEffect(() => setCanReplay(!prefersReducedMotion()), []);
+
+  /* The office layer goes inert during a replay, so hand focus to "Skip intro". */
+  useEffect(() => {
+    if (replaying) skipRef.current?.focus();
+  }, [replaying]);
 
   /* Reveal when the intro ends, or straight away if it cannot or should not play. */
   useEffect(() => {
@@ -224,6 +249,18 @@ export function Hero() {
         <source src="/hero.mp4" type="video/mp4" />
       </video>
 
+      {/* Only during a replay: a way out of the 25-second intro */}
+      {replaying && !ready && (
+        <button
+          ref={skipRef}
+          type="button"
+          onClick={reveal}
+          className="absolute bottom-5 right-4 z-40 rounded-full bg-paper/90 px-5 py-2 text-base font-semibold text-neem ring-2 ring-neem transition-colors hover:bg-neem hover:text-paper focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-saffron sm:bottom-6 sm:right-6"
+        >
+          Skip intro
+        </button>
+      )}
+
       {/* Office scene, revealed when the intro ends */}
       <div
         inert={!ready}
@@ -298,6 +335,20 @@ export function Hero() {
             </div>
           </div>
         </div>
+
+        {/* Replay the intro */}
+        {canReplay && (
+          <button
+            type="button"
+            onClick={replay}
+            className="group absolute bottom-5 right-4 z-30 inline-flex items-center gap-2.5 rounded-full bg-paper/90 py-1.5 pl-1.5 pr-5 text-base font-semibold text-neem shadow-[0_4px_0_#173f30] ring-2 ring-neem transition-transform hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_1px_0_#173f30] focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-saffron sm:bottom-6 sm:right-6"
+          >
+            <span className="grid size-9 place-items-center rounded-full bg-saffron transition-transform group-hover:scale-110">
+              <Play className="size-4 translate-x-px fill-neem" aria-hidden />
+            </span>
+            Watch the intro again
+          </button>
+        )}
 
         {/* Petals */}
         <div aria-hidden className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
