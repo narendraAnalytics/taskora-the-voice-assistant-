@@ -58,6 +58,8 @@ export function Hero() {
     readyRef.current = true;
     setReady(true);
     setReplaying(false);
+    /* Skipping must also silence the voiceover and music, which are baked into the intro video. */
+    introRef.current?.pause();
     if (!prefersReducedMotion()) officeRef.current?.play().catch(() => {});
   }, []);
 
