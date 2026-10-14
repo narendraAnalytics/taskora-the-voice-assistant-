@@ -2,6 +2,7 @@ import React from "react";
 import {
   AbsoluteFill,
   Easing,
+  Html5Audio,
   Img,
   staticFile,
   Sequence,
@@ -24,6 +25,7 @@ import {
   talkAt,
   type Arm,
 } from "./illustrations";
+import voiceover from "./voiceover.json";
 
 const anek = loadAnek("normal", { weights: ["800"], subsets: ["latin"] });
 const mukta = loadMukta("normal", { weights: ["600", "700"], subsets: ["latin"] });
@@ -1001,6 +1003,19 @@ const Brand: React.FC = () => {
   );
 };
 
+/* ───────────────────────── Voiceover ───────────────────────── */
+
+/** Kokoro clips from `pnpm video:voice`; each starts `at` frames into its scene. */
+const Voiceover: React.FC = () => (
+  <>
+    {voiceover.lines.map(({ id, scene, at }) => (
+      <Sequence key={id} from={AT[scene as keyof typeof AT] + at} layout="none">
+        <Html5Audio src={staticFile(`voice/${id}.wav`)} />
+      </Sequence>
+    ))}
+  </>
+);
+
 /* ───────────────────────── Camera + timeline ───────────────────────── */
 
 /** Frames where the outgoing and incoming scenes overlap during a zoom transition. */
@@ -1065,6 +1080,7 @@ export const HeroLoop: React.FC = () => (
       );
     })}
     <Brand />
+    <Voiceover />
     <Grain />
     <Wipe at={AT.stale} color={C.neem} />
     {/* ends fully paper so the page's office scene can fade in over it */}

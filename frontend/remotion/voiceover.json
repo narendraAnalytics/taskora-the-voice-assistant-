@@ -1,0 +1,59 @@
+{
+  "voices": {
+    "narrator": "af_heart",
+    "intern": "af_bella"
+  },
+  "speed": 1,
+  "lines": [
+    {
+      "id": "stale",
+      "scene": "stale",
+      "at": 12,
+      "maxSeconds": 4.3,
+      "voice": "narrator",
+      "text": "Every day, the same question: what's the status? Nobody knows."
+    },
+    {
+      "id": "speak",
+      "scene": "speak",
+      "at": 2,
+      "maxSeconds": 1.2,
+      "voice": "narrator",
+      "speed": 1.15,
+      "text": "Interns just speak."
+    },
+    {
+      "id": "intern",
+      "scene": "speak",
+      "at": 38,
+      "maxSeconds": 3.7,
+      "voice": "intern",
+      "speed": 1.1,
+      "text": "Login page is done. Blocked on the API key."
+    },
+    {
+      "id": "board",
+      "scene": "board",
+      "at": 10,
+      "maxSeconds": 4.2,
+      "voice": "narrator",
+      "text": "Taskora understands, and the board updates itself."
+    },
+    {
+      "id": "win",
+      "scene": "win",
+      "at": 10,
+      "maxSeconds": 4.6,
+      "voice": "narrator",
+      "text": "No confusion. No chasing. Target achieved."
+    },
+    {
+      "id": "brand",
+      "scene": "brand",
+      "at": 24,
+      "maxSeconds": 3.6,
+      "voice": "narrator",
+      "text": "Taskora. Your team's voice coordinator."
+    }
+  ]
+}

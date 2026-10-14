@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Play } from "lucide-react";
+import { Play, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { pilotMailto } from "@/lib/site";
 
@@ -42,7 +42,16 @@ export function Hero() {
   const [breeze, setBreeze] = useState(false);
   const [canReplay, setCanReplay] = useState(false);
   const [replaying, setReplaying] = useState(false);
+  const [sound, setSound] = useState(false);
   const skipRef = useRef<HTMLButtonElement>(null);
+
+  /* The intro autoplays muted (browsers block sound without a gesture); this click unmutes it. */
+  const toggleSound = useCallback(() => {
+    const intro = introRef.current;
+    if (!intro) return;
+    intro.muted = !intro.muted;
+    setSound(!intro.muted);
+  }, []);
 
   const reveal = useCallback(() => {
     if (readyRef.current) return;
@@ -248,6 +257,19 @@ export function Hero() {
         <source src="/hero-vertical.mp4" type="video/mp4" media="(max-aspect-ratio: 1/1)" />
         <source src="/hero.mp4" type="video/mp4" />
       </video>
+
+      {/* The intro has a voiceover; it starts muted */}
+      {!ready && (
+        <button
+          type="button"
+          onClick={toggleSound}
+          aria-pressed={sound}
+          className="absolute bottom-5 left-4 z-40 inline-flex items-center gap-2 rounded-full bg-paper/90 py-2 pl-3 pr-5 text-base font-semibold text-neem ring-2 ring-neem transition-colors hover:bg-neem hover:text-paper focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-saffron motion-reduce:hidden sm:bottom-6 sm:left-6"
+        >
+          {sound ? <Volume2 className="size-5" aria-hidden /> : <VolumeX className="size-5" aria-hidden />}
+          {sound ? "Mute" : "Turn on sound"}
+        </button>
+      )}
 
       {/* Only during a replay: a way out of the 25-second intro */}
       {replaying && !ready && (

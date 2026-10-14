@@ -6,8 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "video:studio": "remotion studio remotion/index.ts",
-    "video:render": "remotion render remotion/index.ts HeroLoop public/hero.mp4 --codec=h264 --crf=28 --pixel-format=yuv420p && remotion render remotion/index.ts HeroLoopVertical public/hero-vertical.mp4 --codec=h264 --crf=28 --pixel-format=yuv420p && remotion still remotion/index.ts HeroLoop public/hero-poster.jpg --frame=120 --image-format=jpeg",
+    "video:studio": "remotion studio remotion/index.ts --public-dir=remotion/assets",
+    "video:voice": "node remotion/voiceover.mjs",
+    "video:render": "remotion render remotion/index.ts HeroLoop public/hero.mp4 --public-dir=remotion/assets --codec=h264 --crf=28 --pixel-format=yuv420p && remotion render remotion/index.ts HeroLoopVertical public/hero-vertical.mp4 --public-dir=remotion/assets --codec=h264 --crf=28 --pixel-format=yuv420p && remotion still remotion/index.ts HeroLoop public/hero-poster.jpg --public-dir=remotion/assets --frame=120 --image-format=jpeg",
     "video:render-office": "remotion render remotion/index.ts OfficeLoop public/hero-office.mp4 --public-dir=remotion/assets --codec=h264 --crf=28 --pixel-format=yuv420p --muted && remotion still remotion/index.ts OfficeLoop public/hero-office-poster.jpg --public-dir=remotion/assets --frame=96 --image-format=jpeg"
   },
   "dependencies": {
@@ -38,6 +39,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "kokoro-js": "^1.2.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
