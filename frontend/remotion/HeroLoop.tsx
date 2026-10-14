@@ -1016,6 +1016,28 @@ const Voiceover: React.FC = () => (
   </>
 );
 
+/** Frames the music takes to dip under a line and to come back up after it. */
+const DUCK_IN = 8;
+const DUCK_OUT = 14;
+
+/** Music from `pnpm video:music` at `music.volume`, dipping to `music.duck` under each voice line. */
+const Music: React.FC = () => {
+  const { fps } = useVideoConfig();
+  const { file, volume, duck } = voiceover.music;
+  const lines = voiceover.lines.map(({ scene, at, maxSeconds }) => {
+    const start = AT[scene as keyof typeof AT] + at;
+    return { start, end: start + maxSeconds * fps };
+  });
+  const level = (f: number) => {
+    const under = Math.max(
+      0,
+      ...lines.map(({ start, end }) => clamp01(Math.min((f - start + DUCK_IN) / DUCK_IN, (end + DUCK_OUT - f) / DUCK_OUT))),
+    );
+    return lerp(volume, duck, under);
+  };
+  return <Html5Audio src={staticFile(file)} volume={level} />;
+};
+
 /* ───────────────────────── Camera + timeline ───────────────────────── */
 
 /** Frames where the outgoing and incoming scenes overlap during a zoom transition. */
@@ -1080,6 +1102,7 @@ export const HeroLoop: React.FC = () => (
       );
     })}
     <Brand />
+    <Music />
     <Voiceover />
     <Grain />
     <Wipe at={AT.stale} color={C.neem} />
