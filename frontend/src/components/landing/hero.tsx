@@ -254,8 +254,8 @@ export function Hero() {
         onEnded={reveal}
         onError={reveal}
       >
-        <source src="/hero-vertical.mp4" type="video/mp4" media="(max-aspect-ratio: 1/1)" />
-        <source src="/hero.mp4" type="video/mp4" />
+        <source src="https://res.cloudinary.com/dkqbzwicr/video/upload/v1791987259/hero-vertical_ynb6gy.mp4" type="video/mp4" media="(max-aspect-ratio: 1/1)" />
+        <source src="https://res.cloudinary.com/dkqbzwicr/video/upload/v1791987260/hero_fnru9x.mp4" type="video/mp4" />
       </video>
 
       {/* The intro has a voiceover; it starts muted */}
@@ -307,7 +307,7 @@ export function Hero() {
             poster="/hero-office-poster.jpg"
             aria-hidden
           >
-            <source src="/hero-office.mp4" type="video/mp4" />
+            <source src="https://res.cloudinary.com/dkqbzwicr/video/upload/v1791987258/hero-office_azvkue.mp4" type="video/mp4" />
           </video>
           {/* Softens the seam between paper and footage on phones */}
           <div className="absolute inset-x-0 top-0 h-1/4 bg-gradient-to-b from-paper to-transparent lg:hidden" />
