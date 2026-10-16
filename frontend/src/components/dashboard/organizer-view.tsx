@@ -1,19 +1,30 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, AlertTriangle, CheckCircle2, Users } from "lucide-react";
-import { INTERNS, type Intern, type Status } from "@/lib/demo-data";
+import { StatCards } from "@/components/dashboard/stat-cards";
+import { INTERNS, STATUS_LABEL, type Intern, type Status } from "@/lib/demo-data";
 import type { Invite } from "@/app/dashboard/actions";
 import { InviteDialog } from "@/components/dashboard/invite-dialog";
 import { Jarvis } from "@/components/dashboard/jarvis";
 import { Avatar, StatusChip } from "@/components/dashboard/status-chip";
 import { Shell } from "@/components/dashboard/shell";
+import { motion, useReducedMotion } from "framer-motion";
+import { GrowBar, PaperCard, Tape } from "@/components/dashboard/motion";
 import { cn } from "@/lib/utils";
 
-const card = "rounded-[2rem] bg-paper-deep/70 p-5 ring-1 ring-neem/10 sm:p-6";
+const card = "rounded-[2rem] bg-paper-deep/70 p-5 ring-1 ring-neem/10 backdrop-blur-sm sm:p-6";
+
+const MIX: [Status, string][] = [
+  ["done", "bg-tulsi"],
+  ["progress", "bg-haldi"],
+  ["todo", "bg-sage"],
+  ["blocked", "bg-kumkum"],
+  ["overdue", "bg-saffron"],
+];
 
 export function OrganizerView({ name, invites }: { name: string; invites: Invite[] }) {
   const [interns, setInterns] = useState<Intern[]>(INTERNS);
+  const reduce = useReducedMotion();
 
   /* Swap who owns a task: the receiver takes the sender's task, the sender is freed up. */
   const reassign = (fromId: string, toId: string) =>
@@ -29,80 +40,124 @@ export function OrganizerView({ name, invites }: { name: string; invites: Invite
     });
 
   const count = (s: Status) => interns.filter((i) => i.status === s).length;
-  const behind = count("overdue") + count("blocked");
-  const stats = [
-    { label: "Interns", value: interns.length, icon: Users, tone: "bg-neem text-paper", sub: "in this batch" },
-    { label: "On track", value: count("progress") + count("done"), icon: Activity, tone: "bg-tulsi text-neem", sub: "moving or done" },
-    { label: "Done", value: count("done"), icon: CheckCircle2, tone: "bg-haldi text-neem", sub: "tasks finished" },
-    { label: "Behind", value: behind, icon: AlertTriangle, tone: "bg-kumkum text-paper", sub: "blocked or overdue" },
-  ];
 
   const feed = [...interns].sort((a, b) => (a.updatedAt === "Just now" ? -1 : b.updatedAt === "Just now" ? 1 : 0));
 
   return (
     <Shell name={name} role="organizer" title="Organizer dashboard" subtitle="Here is your intern batch today." action={<InviteDialog initial={invites} />}>
       <div className="grid gap-5 lg:grid-cols-12">
-        <div className="lg:col-span-7">
+        <PaperCard i={0} tilt={-1.5} className="lg:col-span-7">
           <Jarvis interns={interns} onReassign={reassign} />
-        </div>
+        </PaperCard>
 
-        <div className="grid grid-cols-2 gap-5 lg:col-span-5">
-          {stats.map((s) => (
-            <div key={s.label} className={cn("flex flex-col justify-between rounded-[2rem] p-5", s.tone)}>
-              <s.icon className="size-6 opacity-80" aria-hidden />
-              <div className="mt-6">
-                <p className="font-hand text-6xl font-bold leading-none tabular-nums">{s.value}</p>
-                <p className="mt-1 text-base font-bold">{s.label}</p>
-                <p className="text-sm opacity-75">{s.sub}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+        <StatCards interns={interns} />
 
-        <section className={cn(card, "lg:col-span-7")}>
+        <PaperCard as="section" i={5} tilt={1.5} className={cn(card, "lg:col-span-7")}>
           <div className="flex items-baseline justify-between">
             <h2 className="font-hand text-4xl font-bold leading-none">The board</h2>
             <p className="font-note text-sm text-moss">Updated from voice standups</p>
           </div>
-          <ul className="mt-4 divide-y divide-neem/10">
-            {interns.map((i) => (
-              <li key={i.id} className="flex items-center gap-3 py-3.5">
-                <Avatar name={i.name} />
+
+          {/* Batch mix ribbon */}
+          <div className="mt-6 flex h-3 rounded-full bg-neem/10" role="list" aria-label="Status mix for the batch">
+            {MIX.map(([s, tone]) =>
+              count(s) ? (
+                <motion.span
+                  key={s}
+                  role="listitem"
+                  tabIndex={0}
+                  aria-label={`${count(s)} ${STATUS_LABEL[s].toLowerCase()}`}
+                  className={cn(
+                    "group/seg relative h-full outline-none transition-[height,margin] duration-200 first:rounded-l-full last:rounded-r-full hover:-my-1 hover:h-5 focus-visible:-my-1 focus-visible:h-5",
+                    tone,
+                  )}
+                  initial={reduce ? false : { width: 0 }}
+                  animate={{ width: `${(count(s) / interns.length) * 100}%` }}
+                  transition={{ duration: 0.9, delay: 0.6, ease: [0.2, 0.8, 0.2, 1] }}
+                >
+                  {/* Palette tooltip (replaces the browser's plain one) */}
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2.5 -translate-x-1/2 translate-y-1 scale-90 whitespace-nowrap rounded-2xl bg-neem px-3.5 py-1.5 text-paper opacity-0 shadow-[0_8px_20px_-8px_#173f3080] transition-all duration-200 group-hover/seg:translate-y-0 group-hover/seg:scale-100 group-hover/seg:opacity-100 group-focus-visible/seg:translate-y-0 group-focus-visible/seg:scale-100 group-focus-visible/seg:opacity-100"
+                  >
+                    <span className="font-hand text-2xl font-bold leading-none text-haldi">{count(s)}</span>{" "}
+                    <span className="font-note text-base">{STATUS_LABEL[s].toLowerCase()}</span>
+                    <span className="absolute left-1/2 top-full -translate-x-1/2 border-x-[7px] border-t-[7px] border-x-transparent border-t-neem" />
+                  </span>
+                </motion.span>
+              ) : null,
+            )}
+          </div>
+          {/* Legend — also covers touch screens where there is no hover */}
+          <ul className="font-note mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-sm text-moss">
+            {MIX.map(([s, tone]) =>
+              count(s) ? (
+                <li key={s} className="flex items-center gap-1.5">
+                  <span className={cn("size-2.5 rounded-full", tone)} aria-hidden />
+                  {count(s)} {STATUS_LABEL[s].toLowerCase()}
+                </li>
+              ) : null,
+            )}
+          </ul>
+
+          <ul className="mt-3 divide-y divide-neem/10">
+            {interns.map((i, n) => (
+              <motion.li
+                key={i.id}
+                layout={!reduce}
+                initial={reduce ? false : { opacity: 0, x: -18 }}
+                animate={{
+                  opacity: 1,
+                  x: 0,
+                  backgroundColor: i.updatedAt === "Just now" ? ["#f2b33d66", "#f2b33d00"] : "#f2b33d00",
+                }}
+                transition={{ delay: 0.5 + n * 0.06, backgroundColor: { duration: 1.6 } }}
+                className="group -mx-2 flex items-center gap-3 rounded-2xl px-2 py-3.5 transition-colors hover:bg-paper/70"
+              >
+                <Avatar name={i.name} className="transition-transform group-hover:-rotate-6 group-hover:scale-110" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold">{i.name}</p>
                   <p className="truncate text-sm text-moss">{i.task}</p>
-                  <div className="mt-1.5 h-1.5 w-full max-w-[14rem] overflow-hidden rounded-full bg-neem/10">
-                    <div
-                      className={cn("h-full rounded-full transition-[width] duration-700", i.status === "blocked" || i.status === "overdue" ? "bg-kumkum" : "bg-neem")}
-                      style={{ width: `${i.progress}%` }}
-                    />
-                  </div>
+                  <GrowBar
+                    value={i.progress}
+                    className="mt-1.5 h-1.5 w-full max-w-[14rem]"
+                    barClassName={i.status === "blocked" || i.status === "overdue" ? "bg-kumkum" : "bg-neem"}
+                  />
                 </div>
                 <div className="flex flex-col items-end gap-1.5">
                   <StatusChip status={i.status} />
                   <span className="text-xs text-moss">Due {i.due}</span>
                 </div>
-              </li>
+              </motion.li>
             ))}
           </ul>
-        </section>
+        </PaperCard>
 
-        <section className={cn(card, "lg:col-span-5")}>
+        <PaperCard as="section" i={6} tilt={-2} className={cn(card, "lg:col-span-5")}>
           <h2 className="font-hand text-4xl font-bold leading-none">Standups</h2>
           <p className="font-note mt-1 text-sm text-moss">What interns said out loud</p>
-          <ul className="mt-4 space-y-3">
-            {feed.slice(0, 5).map((i) => (
-              <li key={i.id} className="rounded-2xl bg-paper p-3.5">
+          <ul className="mt-5 space-y-4">
+            {feed.slice(0, 5).map((i, n) => (
+              <motion.li
+                key={i.id}
+                layout={!reduce}
+                initial={reduce ? false : { opacity: 0, y: 16, rotate: n % 2 ? 2 : -2 }}
+                animate={{ opacity: 1, y: 0, rotate: n % 2 ? 0.6 : -0.6 }}
+                whileHover={reduce ? undefined : { rotate: 0, y: -3, scale: 1.015 }}
+                transition={{ type: "spring", stiffness: 200, damping: 16, delay: 0.7 + n * 0.08 }}
+                className="relative rounded-2xl bg-paper p-3.5 shadow-[0_3px_0_#173f3014]"
+              >
+                {n === 0 && <Tape className="-top-3 right-8" />}
                 <div className="flex items-center gap-2.5">
                   <Avatar name={i.name} className="size-8 text-xs" />
                   <span className="text-sm font-bold">{i.name}</span>
                   <span className="ml-auto text-xs text-moss">{i.updatedAt}</span>
                 </div>
                 <p className="font-note mt-2 text-[1.02rem] leading-snug">“{i.update}”</p>
-              </li>
+              </motion.li>
             ))}
           </ul>
-        </section>
+        </PaperCard>
       </div>
     </Shell>
   );

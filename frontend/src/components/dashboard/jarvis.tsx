@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, Send, Square, Volume2 } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { Tape } from "@/components/dashboard/motion";
+import { VoiceOrb } from "@/components/dashboard/voice-orb";
 import { useSpeech } from "@/lib/use-speech";
 import { respond, SUGGESTIONS, type Reply } from "@/lib/jarvis";
 import type { Intern } from "@/lib/demo-data";
@@ -47,7 +50,8 @@ export function Jarvis({ interns, onReassign }: { interns: Intern[]; onReassign:
     [pending, say],
   );
 
-  const { supported, listening, transcript, seconds, start, stop, speak } = useSpeech(handle, 15);
+  const { supported, listening, speaking, transcript, seconds, start, stop, speak } = useSpeech(handle, 15);
+  const reduce = useReducedMotion();
   useEffect(() => {
     speechRef.current = { speak };
   }, [speak]);
@@ -69,9 +73,22 @@ export function Jarvis({ interns, onReassign }: { interns: Intern[]; onReassign:
         className="pointer-events-none absolute -right-24 -top-24 size-80 rounded-full bg-saffron/30 blur-3xl"
       />
       <div className="relative flex items-start justify-between gap-3">
-        <div>
-          <h2 className="font-hand text-4xl font-bold leading-none text-haldi">Ask Taskora</h2>
-          <p className="font-note mt-1.5 text-base text-sage">Talk to it like Jarvis. It knows your whole batch.</p>
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={listening ? stop : start}
+            disabled={!supported}
+            aria-label={listening ? "Stop listening" : "Talk to Taskora"}
+            className="size-20 shrink-0 rounded-full transition-transform hover:scale-105 active:scale-95 disabled:cursor-default sm:size-24"
+          >
+            <VoiceOrb mode={listening ? "listening" : speaking ? "speaking" : "idle"} className="size-full" />
+          </button>
+          <div>
+            <h2 className="font-hand text-4xl font-bold leading-none text-haldi">Ask Taskora</h2>
+            <p className="font-note mt-1.5 text-base text-sage">
+              {listening ? "Listening… go ahead." : speaking ? "Speaking…" : "Talk to it like Jarvis. It knows your whole batch."}
+            </p>
+          </div>
         </div>
         <button
           type="button"
@@ -96,15 +113,19 @@ export function Jarvis({ interns, onReassign }: { interns: Intern[]; onReassign:
         className="relative mt-5 flex-1 space-y-3 overflow-y-auto pr-1 [max-height:15rem] sm:[max-height:17rem]"
       >
         {log.map((m, i) => (
-          <p
+          <motion.p
             key={i}
+            initial={reduce ? false : { opacity: 0, y: 12, scale: 0.94, x: m.from === "you" ? 16 : -16 }}
+            animate={{ opacity: 1, y: 0, scale: 1, x: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 22 }}
+            style={{ transformOrigin: m.from === "you" ? "bottom right" : "bottom left" }}
             className={cn(
               "max-w-[88%] rounded-2xl px-4 py-2.5 text-[0.98rem] leading-snug",
               m.from === "you" ? "ml-auto rounded-br-md bg-haldi text-neem" : "rounded-bl-md bg-neem-soft text-paper",
             )}
           >
             {m.text}
-          </p>
+          </motion.p>
         ))}
         {listening && (
           <p className="ml-auto max-w-[88%] rounded-2xl rounded-br-md bg-haldi/70 px-4 py-2.5 text-neem">
@@ -112,7 +133,13 @@ export function Jarvis({ interns, onReassign }: { interns: Intern[]; onReassign:
           </p>
         )}
         {confirm && from && to && (
-          <div className="rounded-2xl bg-paper p-4 text-neem">
+          <motion.div
+            initial={reduce ? false : { opacity: 0, y: 20, rotate: -3 }}
+            animate={{ opacity: 1, y: 0, rotate: 0 }}
+            transition={{ type: "spring", stiffness: 220, damping: 15 }}
+            className="relative rounded-2xl bg-paper p-4 text-neem"
+          >
+            <Tape className="-top-3 left-6" />
             <p className="text-sm font-bold">Confirm change</p>
             <p className="mt-1 text-[0.98rem]">
               Move <b>{from.task}</b> from <b>{from.name}</b> to <b>{to.name}</b>.
@@ -140,7 +167,7 @@ export function Jarvis({ interns, onReassign }: { interns: Intern[]; onReassign:
                 Cancel
               </button>
             </div>
-          </div>
+          </motion.div>
         )}
       </div>
 
@@ -150,7 +177,7 @@ export function Jarvis({ interns, onReassign }: { interns: Intern[]; onReassign:
             key={s}
             type="button"
             onClick={() => handle(s)}
-            className="rounded-full bg-neem-soft px-3.5 py-1.5 text-sm font-semibold text-paper transition-colors hover:bg-haldi hover:text-neem"
+            className="rounded-full bg-neem-soft px-3.5 py-1.5 text-sm font-semibold text-paper transition-[background-color,color,transform] hover:-translate-y-0.5 hover:-rotate-1 hover:bg-haldi hover:text-neem active:scale-95"
           >
             {s}
           </button>

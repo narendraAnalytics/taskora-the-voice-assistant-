@@ -34,6 +34,7 @@ export function useSpeech(onFinal?: (text: string) => void, maxSeconds = 20) {
   const [transcript, setTranscript] = useState("");
   const [supported, setSupported] = useState(true);
   const [seconds, setSeconds] = useState(0);
+  const [speaking, setSpeaking] = useState(false);
 
   useEffect(() => {
     cbRef.current = onFinal;
@@ -88,6 +89,9 @@ export function useSpeech(onFinal?: (text: string) => void, maxSeconds = 20) {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "en-IN";
     u.rate = 1.02;
+    u.onstart = () => setSpeaking(true);
+    u.onend = () => setSpeaking(false);
+    u.onerror = () => setSpeaking(false);
     synth.speak(u);
   }, []);
 
@@ -100,5 +104,5 @@ export function useSpeech(onFinal?: (text: string) => void, maxSeconds = 20) {
     [],
   );
 
-  return { supported, listening, transcript, seconds, start, stop, speak };
+  return { supported, listening, speaking, transcript, seconds, start, stop, speak };
 }

@@ -6,10 +6,36 @@ import { MY_TASKS, STATUS_LABEL, type Status } from "@/lib/demo-data";
 import { useSpeech } from "@/lib/use-speech";
 import { StatusChip } from "@/components/dashboard/status-chip";
 import { Shell } from "@/components/dashboard/shell";
+import { motion, useReducedMotion } from "framer-motion";
+import { PaperCard, Tape } from "@/components/dashboard/motion";
 import { cn } from "@/lib/utils";
 
 const MAX = 20;
-const card = "rounded-[2rem] bg-paper-deep/70 p-5 ring-1 ring-neem/10 sm:p-6";
+
+const CONFETTI = ["#f2b33d", "#e8622a", "#7dbe8f", "#fce7b2", "#b23a48"];
+
+/** A one-shot burst of paper bits from the "Send update" button. */
+function Confetti() {
+  return (
+    <span aria-hidden className="pointer-events-none absolute inset-0">
+      {Array.from({ length: 18 }).map((_, k) => {
+        const angle = (k / 18) * Math.PI * 2;
+        const dist = 60 + (k % 4) * 18;
+        return (
+          <motion.span
+            key={k}
+            className="absolute left-1/2 top-1/2 h-2.5 w-1.5 rounded-[1px]"
+            style={{ backgroundColor: CONFETTI[k % CONFETTI.length] }}
+            initial={{ x: 0, y: 0, rotate: 0, opacity: 1 }}
+            animate={{ x: Math.cos(angle) * dist, y: Math.sin(angle) * dist + 30, rotate: 360 + k * 40, opacity: 0 }}
+            transition={{ duration: 1.1, ease: [0.15, 0.7, 0.3, 1] }}
+          />
+        );
+      })}
+    </span>
+  );
+}
+const card = "rounded-[2rem] bg-paper-deep/70 p-5 ring-1 ring-neem/10 backdrop-blur-sm sm:p-6";
 
 /** Split a spoken update into done / next / blocked using simple cue words (Gemini does this later). */
 function summarise(text: string) {
@@ -24,6 +50,7 @@ function summarise(text: string) {
 
 export function InternView({ name }: { name: string }) {
   const [tasks, setTasks] = useState(MY_TASKS);
+  const reduce = useReducedMotion();
   const [update, setUpdate] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [draft, setDraft] = useState("");
@@ -44,7 +71,7 @@ export function InternView({ name }: { name: string }) {
   return (
     <Shell name={name} role="intern" title="Intern workspace" subtitle="Give your 20-second standup. Taskora does the rest.">
       <div className="grid gap-5 lg:grid-cols-12">
-        <section className="relative overflow-hidden rounded-[2rem] bg-neem p-6 text-paper sm:p-8 lg:col-span-7">
+        <PaperCard as="section" i={0} tilt={-1.5} className="relative overflow-hidden rounded-[2rem] bg-neem p-6 text-paper sm:p-8 lg:col-span-7">
           <div aria-hidden className="pointer-events-none absolute -left-20 -top-20 size-72 rounded-full bg-saffron/30 blur-3xl" />
           <h2 className="font-hand relative text-4xl font-bold leading-none text-haldi">Today&apos;s standup</h2>
           <p className="font-note relative mt-1.5 text-base text-sage">Say what you finished, what&apos;s next, and what is blocking you.</p>
@@ -134,8 +161,9 @@ export function InternView({ name }: { name: string }) {
                   type="button"
                   disabled={sent}
                   onClick={() => setSent(true)}
-                  className="inline-flex items-center gap-2 rounded-full bg-saffron px-5 py-2.5 font-bold text-neem hover:bg-[#ef7740] disabled:bg-tulsi"
+                  className="relative inline-flex items-center gap-2 rounded-full bg-saffron px-5 py-2.5 font-bold text-neem transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-[#ef7740] active:scale-95 disabled:bg-tulsi"
                 >
+                  {sent && !reduce && <Confetti />}
                   {sent ? (
                     <>
                       <Check className="size-4" aria-hidden /> Sent to your organizer
@@ -157,10 +185,10 @@ export function InternView({ name }: { name: string }) {
               </div>
             </div>
           )}
-        </section>
+        </PaperCard>
 
         <div className="flex flex-col gap-5 lg:col-span-5">
-          <section className={card}>
+          <PaperCard as="section" i={1} tilt={2} className={card}>
             <div className="flex items-baseline justify-between">
               <h2 className="font-hand text-4xl font-bold leading-none">My tasks</h2>
               <span className="font-note text-sm text-moss">
@@ -169,7 +197,14 @@ export function InternView({ name }: { name: string }) {
             </div>
             <ul className="mt-4 space-y-3">
               {tasks.map((t) => (
-                <li key={t.id} className="rounded-2xl bg-paper p-4">
+                <motion.li
+                  key={t.id}
+                  initial={reduce ? false : { opacity: 0, y: 14, rotate: -1.5 }}
+                  animate={{ opacity: 1, y: 0, rotate: 0 }}
+                  whileHover={reduce ? undefined : { y: -3 }}
+                  transition={{ type: "spring", stiffness: 220, damping: 18, delay: 0.45 + tasks.indexOf(t) * 0.08 }}
+                  className={cn("rounded-2xl bg-paper p-4 shadow-[0_3px_0_#173f3014] transition-opacity", t.status === "done" && "opacity-75")}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <p className="font-semibold leading-snug">{t.title}</p>
                     <StatusChip status={t.status} />
@@ -191,25 +226,30 @@ export function InternView({ name }: { name: string }) {
                       </button>
                     ))}
                   </div>
-                </li>
+                </motion.li>
               ))}
             </ul>
-          </section>
+          </PaperCard>
 
-          <section className="rounded-[2rem] bg-haldi p-5 sm:p-6">
+          <PaperCard as="section" i={2} tilt={-2.5} className="relative rounded-[2rem] bg-haldi p-5 sm:p-6"><Tape className="-top-3 left-10" />
             <h2 className="font-hand text-4xl font-bold leading-none">Your streak</h2>
             <div className="mt-4 flex gap-2" aria-label="Standups this week">
               {["M", "T", "W", "T", "F"].map((d, i) => (
                 <div key={i} className="flex flex-1 flex-col items-center gap-1.5">
-                  <span className={cn("grid size-10 place-items-center rounded-full text-sm font-bold", i < 3 ? "bg-neem text-paper" : "bg-neem/15")}>
+                  <motion.span
+                    className={cn("grid size-10 place-items-center rounded-full text-sm font-bold", i < 3 ? "bg-neem text-paper" : "bg-neem/15")}
+                    initial={reduce ? false : { scale: 0, rotate: -40 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    transition={{ type: "spring", stiffness: 320, damping: 12, delay: 0.7 + i * 0.1 }}
+                  >
                     {i < 3 ? <Check className="size-4" aria-hidden /> : null}
-                  </span>
+                  </motion.span>
                   <span className="text-xs font-semibold">{d}</span>
                 </div>
               ))}
             </div>
             <p className="font-note mt-4 text-base">Three days in a row. Keep it going!</p>
-          </section>
+          </PaperCard>
         </div>
       </div>
     </Shell>
