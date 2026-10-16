@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Show, SignInButton, UserButton, useUser } from "@clerk/nextjs";
+import { Show, SignInButton, UserButton, useAuth, useUser } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/landing/logo";
 
@@ -25,6 +25,7 @@ export function SiteNav() {
   const [past, setPast] = useState(false);
   const [focused, setFocused] = useState(false);
   const [dark, setDark] = useState(false);
+  const { isSignedIn } = useAuth();
 
   useEffect(() => {
     const update = () => {
@@ -43,7 +44,8 @@ export function SiteNav() {
     };
   }, []);
 
-  const shown = past || focused;
+  // Signed-in members always see their welcome + avatar, even over the hero.
+  const shown = past || focused || !!isSignedIn;
 
   return (
     <nav

@@ -33,6 +33,16 @@ const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: r
  * CTAs. Mouse movement adds depth, hovering "Join the pilot" kicks up a breeze of petals and
  * clicking it (or pressing Enter) showers petals.
  */
+const MEMBER_KEY = "taskora-member";
+
+function isKnownMember() {
+  try {
+    return localStorage.getItem(MEMBER_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function Hero() {
   const sceneRef = useRef<HTMLElement>(null);
   const introRef = useRef<HTMLVideoElement>(null);
@@ -42,7 +52,7 @@ export function Hero() {
   const [ready, setReady] = useState(false);
   const [petals, setPetals] = useState<Petal[]>([]);
   const [breeze, setBreeze] = useState(false);
-  const { isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
   const { openSignUp } = useClerk();
   const [canReplay, setCanReplay] = useState(false);
   const [replaying, setReplaying] = useState(false);
@@ -91,7 +101,7 @@ export function Hero() {
   useEffect(() => {
     const intro = introRef.current;
     if (!intro) return;
-    if (prefersReducedMotion()) {
+    if (prefersReducedMotion() || isKnownMember()) {
       reveal();
       return;
     }
@@ -101,6 +111,17 @@ export function Hero() {
     }, 4000);
     return () => window.clearTimeout(watchdog);
   }, [reveal]);
+
+  /* Signed-in members land straight on the office scene, never the intro. The flag lets the next
+     page load skip the intro before Clerk has finished loading. */
+  useEffect(() => {
+    if (!isLoaded) return;
+    try {
+      if (isSignedIn) localStorage.setItem(MEMBER_KEY, "1");
+      else localStorage.removeItem(MEMBER_KEY);
+    } catch {}
+    if (isSignedIn) reveal();
+  }, [isLoaded, isSignedIn, reveal]);
 
   /* Mouse: smoothed into CSS variables so nothing re-renders per frame. */
   useEffect(() => {
