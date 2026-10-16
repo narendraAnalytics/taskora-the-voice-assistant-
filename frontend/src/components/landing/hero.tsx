@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Play, Volume2, VolumeX } from "lucide-react";
 import { useAuth, useClerk } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { pilotMailto } from "@/lib/site";
 import { LiquidButton, LiquidGooDefs } from "./liquid-button";
@@ -55,6 +56,7 @@ export function Hero() {
   const [breeze, setBreeze] = useState(false);
   const { isLoaded, isSignedIn } = useAuth();
   const { openSignIn, openSignUp } = useClerk();
+  const router = useRouter();
   const [canReplay, setCanReplay] = useState(false);
   const [replaying, setReplaying] = useState(false);
   const [sound, setSound] = useState(false);
@@ -258,7 +260,7 @@ export function Hero() {
     window.setTimeout(
       () => {
         if (isSignedIn) {
-          document.getElementById("pilot")?.scrollIntoView({ behavior: "smooth" });
+          router.push("/dashboard");
         } else {
           /* Someone who has signed in here before gets the sign-in form: running an existing
              Google account through sign-up can stall on "Fill in missing fields". */

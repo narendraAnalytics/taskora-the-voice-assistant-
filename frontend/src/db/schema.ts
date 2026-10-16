@@ -8,6 +8,8 @@ export const users = pgTable("users", {
   firstName: text("first_name"),
   lastName: text("last_name"),
   imageUrl: text("image_url"),
+  /** organizer | intern | admin — set in Neon, never from the client. New users are interns. */
+  role: text("role").$type<"organizer" | "intern" | "admin">().notNull().default("intern"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   lastSignInAt: timestamp("last_sign_in_at", { withTimezone: true }),
