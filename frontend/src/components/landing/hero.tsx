@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Play, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { pilotMailto } from "@/lib/site";
+import { LiquidButton, LiquidGooDefs } from "./liquid-button";
 
 // Cream and leaf tones that sit naturally on the jasmine in the office footage.
 const PETAL_COLORS = ["#fdf0cc", "#fce7b2", "#fdf0cc", "#7dbe8f", "#f2b33d"];
@@ -331,31 +332,28 @@ export function Hero() {
         {/* Copy */}
         <div className="relative z-20 mx-auto flex min-h-[max(100svh,720px)] w-full lg:h-full lg:min-h-0 max-w-[1200px] flex-col justify-start px-4 pt-28 sm:px-6 lg:justify-center lg:px-8 lg:pt-20">
           <div className="max-w-[34rem]">
-            <h2 className="display-wide text-[clamp(2.1rem,4.6vw,3.8rem)] leading-[1.02]">
+            <h2 className="display-wide bg-gradient-to-r from-neem via-neem-soft to-saffron bg-clip-text text-[clamp(2.1rem,4.6vw,3.8rem)] leading-[1.02] text-transparent">
               Meet Taskora, your team&apos;s voice coordinator.
             </h2>
-            <p className="mt-6 text-lg leading-relaxed text-neem/85 sm:text-xl">
+            <p className="font-note mt-6 text-lg leading-relaxed text-neem-soft sm:text-xl">
               Interns give a 20-second update by speaking. Organizers ask who&apos;s behind and hear the
               answer. Nothing changes until someone confirms it.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <a
+              <LiquidGooDefs />
+              <LiquidButton
                 href={pilotMailto}
                 onClick={onJoin}
                 onMouseEnter={() => setBreeze(true)}
                 onMouseLeave={() => setBreeze(false)}
                 onFocus={() => setBreeze(true)}
                 onBlur={() => setBreeze(false)}
-                className="rounded-full bg-haldi px-7 py-3.5 text-lg font-semibold text-neem shadow-[0_5px_0_#173f30] transition-transform hover:-translate-y-0.5 hover:bg-[#f6c25c] active:translate-y-1 active:shadow-[0_1px_0_#173f30]"
               >
                 Join the pilot
-              </a>
-              <a
-                href="#commands"
-                className="rounded-full bg-paper/60 px-7 py-3.5 text-lg font-semibold text-neem ring-2 ring-neem hover:bg-neem hover:text-paper"
-              >
+              </LiquidButton>
+              <LiquidButton href="#commands" variant="outline">
                 See what you can say
-              </a>
+              </LiquidButton>
             </div>
           </div>
         </div>

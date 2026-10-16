@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Anek_Telugu, Mukta } from "next/font/google";
+import { Anek_Telugu, Caveat, Edu_QLD_Hand, Mukta } from "next/font/google";
 import "./globals.css";
 
 const anek = Anek_Telugu({
@@ -13,6 +13,17 @@ const mukta = Mukta({
   variable: "--font-mukta",
   subsets: ["latin", "devanagari"],
   weight: ["400", "500", "600", "700"],
+  display: "swap",
+});
+
+const caveat = Caveat({
+  variable: "--font-caveat",
+  subsets: ["latin"],
+  display: "swap",
+});
+
+const eduQldHand = Edu_QLD_Hand({
+  variable: "--font-edu-qld-hand",
   display: "swap",
 });
 
@@ -30,7 +41,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${anek.variable} ${mukta.variable} h-full antialiased`}
+      className={`${anek.variable} ${mukta.variable} ${caveat.variable} ${eduQldHand.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

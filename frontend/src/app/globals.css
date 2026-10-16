@@ -20,6 +20,8 @@
 
   --font-display: var(--font-anek);
   --font-body: var(--font-mukta);
+  --font-hand: var(--font-caveat), cursive;
+  --font-note: var(--font-edu-qld-hand), cursive;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -319,5 +321,68 @@
 @media (prefers-reduced-motion: reduce) {
   .petal {
     display: none;
+  }
+}
+
+/* Liquid CTA buttons (components/landing/liquid-button.tsx) */
+.liquid-drop {
+  transform: scale(0.5);
+}
+.liquid-fill {
+  transition: transform 0.7s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+.group\/liquid:hover .liquid-fill,
+.group\/liquid:focus-visible .liquid-fill {
+  transform: translateY(-100%);
+}
+.group\/liquid:hover .liquid-drop,
+.group\/liquid:focus-visible .liquid-drop {
+  animation: liquid-scatter 0.9s cubic-bezier(0.2, 0.8, 0.3, 1) var(--d) both;
+}
+.liquid-wave {
+  animation: liquid-wave 1.6s ease-in-out infinite;
+}
+.liquid-ripple {
+  animation: liquid-ripple 0.8s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+@keyframes liquid-scatter {
+  0% {
+    transform: translate(0, 0) scale(0.5);
+  }
+  45% {
+    transform: translate(var(--x), var(--y)) scale(1);
+  }
+  100% {
+    transform: translate(calc(var(--x) * 0.3), calc(var(--y) * 0.1)) scale(0.3);
+  }
+}
+@keyframes liquid-wave {
+  0%,
+  100% {
+    transform: translateY(-3px) scale(1);
+  }
+  50% {
+    transform: translateY(3px) scale(0.8);
+  }
+}
+@keyframes liquid-ripple {
+  from {
+    transform: scale(0);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(22);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .liquid-fill {
+    transition: none;
+  }
+  .group\/liquid:hover .liquid-drop,
+  .group\/liquid:focus-visible .liquid-drop,
+  .liquid-wave,
+  .liquid-ripple {
+    animation: none;
   }
 }

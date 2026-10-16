@@ -59,12 +59,6 @@ export function SiteNav() {
           <a href="#pricing" className="hidden font-semibold hover:text-saffron md:inline">
             Pricing
           </a>
-          <a
-            href="#pilot"
-            className="rounded-full bg-haldi px-4 py-2 text-[0.95rem] font-semibold text-neem hover:bg-[#f6c25c]"
-          >
-            Join the pilot
-          </a>
         </div>
       </div>
     </nav>

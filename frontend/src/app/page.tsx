@@ -80,10 +80,10 @@ export default function Home() {
           </div>
           <div className={wrap}>
             <div className="max-w-[44rem]">
-              <h2 className="display text-[clamp(2.1rem,4.6vw,3.6rem)]">
+              <h2 className="font-hand text-[clamp(2.7rem,6vw,4.6rem)] font-bold leading-[1.02] text-haldi">
                 Say it the way you&apos;d say it to a teammate
               </h2>
-              <p className="mt-5 text-lg text-sage">
+              <p className="font-note mt-5 text-lg text-sage">
                 No commands to memorize. Ask in plain sentences, the way you would ask a teammate, and
                 Taskora works out who, what and when.
               </p>
@@ -97,10 +97,10 @@ export default function Home() {
         {/* Roles */}
         <section id="roles" className="scroll-mt-6 bg-paper py-20 lg:py-28">
           <div className={wrap}>
-            <h2 className="display max-w-[20ch] text-[clamp(2.1rem,4.6vw,3.6rem)] text-neem">
+            <h2 className="font-note max-w-[20ch] bg-gradient-to-r from-neem via-neem-soft to-kumkum bg-clip-text text-[clamp(2.2rem,4.8vw,3.8rem)] font-bold leading-[1.1] text-transparent">
               Built for the people who run intern batches
             </h2>
-            <p className="mt-4 max-w-[38rem] text-lg text-moss">
+            <p className="font-hand mt-4 max-w-[38rem] text-2xl text-moss">
               One voice assistant, three views of the same board. Hover or tap a role to see what it
               gets.
             </p>
@@ -190,10 +190,10 @@ export default function Home() {
         <section id="pilot" className="bg-haldi py-20 text-neem lg:py-28">
           <div className={`${wrap} grid items-end gap-10 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)]`}>
             <div>
-              <h2 className="display-wide text-[clamp(2.4rem,6vw,4.8rem)]">
+              <h2 className="font-hand bg-gradient-to-r from-neem via-neem-soft to-kumkum bg-clip-text text-[clamp(3rem,7.5vw,6rem)] font-bold leading-[1] text-transparent">
                 Run your next intern batch by voice.
               </h2>
-              <p className="mt-6 max-w-[36rem] text-lg">
+              <p className="font-note mt-6 max-w-[36rem] text-lg">
                 We&apos;re setting Taskora up for free with three pilot programs this term: an
                 engineering college, a training institute and a small agency. Tell us about your batch
                 and we&apos;ll get your team talking to it within a week.
