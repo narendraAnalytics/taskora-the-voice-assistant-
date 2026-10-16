@@ -34,6 +34,7 @@ const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: r
  * clicking it (or pressing Enter) showers petals.
  */
 const MEMBER_KEY = "taskora-member";
+const RETURNING_KEY = "taskora-returning";
 
 function isKnownMember() {
   try {
@@ -53,7 +54,7 @@ export function Hero() {
   const [petals, setPetals] = useState<Petal[]>([]);
   const [breeze, setBreeze] = useState(false);
   const { isLoaded, isSignedIn } = useAuth();
-  const { openSignUp } = useClerk();
+  const { openSignIn, openSignUp } = useClerk();
   const [canReplay, setCanReplay] = useState(false);
   const [replaying, setReplaying] = useState(false);
   const [sound, setSound] = useState(false);
@@ -117,8 +118,10 @@ export function Hero() {
   useEffect(() => {
     if (!isLoaded) return;
     try {
-      if (isSignedIn) localStorage.setItem(MEMBER_KEY, "1");
-      else localStorage.removeItem(MEMBER_KEY);
+      if (isSignedIn) {
+        localStorage.setItem(MEMBER_KEY, "1");
+        localStorage.setItem(RETURNING_KEY, "1");
+      } else localStorage.removeItem(MEMBER_KEY);
     } catch {}
     if (isSignedIn) reveal();
   }, [isLoaded, isSignedIn, reveal]);
@@ -257,7 +260,14 @@ export function Hero() {
         if (isSignedIn) {
           document.getElementById("pilot")?.scrollIntoView({ behavior: "smooth" });
         } else {
-          openSignUp({});
+          /* Someone who has signed in here before gets the sign-in form: running an existing
+             Google account through sign-up can stall on "Fill in missing fields". */
+          let returning = false;
+          try {
+            returning = localStorage.getItem(RETURNING_KEY) === "1";
+          } catch {}
+          if (returning) openSignIn({});
+          else openSignUp({});
         }
       },
       prefersReducedMotion() ? 0 : 1400,
