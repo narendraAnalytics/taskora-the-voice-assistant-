@@ -37,4 +37,11 @@ export async function getSession(): Promise<Session | null> {
   return { userId, role: "intern", name: user.username ?? user.firstName ?? "there" };
 }
 
+/** Server-side guard for organizer-only actions. Throws for interns and signed-out callers. */
+export async function requireOrganizer() {
+  const s = await getSession();
+  if (!s || s.role === "intern") throw new Error("Only organizers can do this.");
+  return s;
+}
+
 export const homeFor = (role: Session["role"]) => (role === "intern" ? "/me" : "/dashboard");

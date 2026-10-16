@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { UserButton } from "@clerk/nextjs";
 import { Logo } from "@/components/landing/logo";
 
 /** Dashboard frame: no site navbar — the logo takes you back to the landing hero. */
@@ -10,8 +9,10 @@ export function Shell({
   role,
   title,
   subtitle,
+  action,
   children,
 }: {
+  action?: React.ReactNode;
   name: string;
   role: string;
   title: string;
@@ -36,16 +37,18 @@ export function Shell({
             <span className="hidden rounded-full bg-neem px-3 py-1 text-sm font-semibold capitalize text-paper sm:inline">
               {role}
             </span>
-            <UserButton />
           </div>
         </header>
 
-        <div className="mt-8 sm:mt-10">
-          <p className="font-note text-lg text-moss">{subtitle}</p>
-          <h1 className="font-hand mt-1 bg-gradient-to-r from-neem via-neem-soft to-saffron bg-clip-text text-[clamp(2.8rem,6vw,4.6rem)] font-bold leading-[1] text-transparent">
-            {greet}, {name}
-          </h1>
-          <p className="sr-only">{title}</p>
+        <div className="mt-8 flex flex-wrap items-end justify-between gap-5 sm:mt-10">
+          <div>
+            <p className="font-note text-lg text-moss">{subtitle}</p>
+            <h1 className="font-hand mt-1 bg-gradient-to-r from-neem via-neem-soft to-saffron bg-clip-text text-[clamp(2.8rem,6vw,4.6rem)] font-bold leading-[1] text-transparent">
+              {greet}, {name}
+            </h1>
+            <p className="sr-only">{title}</p>
+          </div>
+          {action}
         </div>
 
         <main className="mt-8">{children}</main>

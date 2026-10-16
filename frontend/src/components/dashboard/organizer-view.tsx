@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Activity, AlertTriangle, CheckCircle2, Users } from "lucide-react";
 import { INTERNS, type Intern, type Status } from "@/lib/demo-data";
+import type { Invite } from "@/app/dashboard/actions";
+import { InviteDialog } from "@/components/dashboard/invite-dialog";
 import { Jarvis } from "@/components/dashboard/jarvis";
 import { Avatar, StatusChip } from "@/components/dashboard/status-chip";
 import { Shell } from "@/components/dashboard/shell";
@@ -10,7 +12,7 @@ import { cn } from "@/lib/utils";
 
 const card = "rounded-[2rem] bg-paper-deep/70 p-5 ring-1 ring-neem/10 sm:p-6";
 
-export function OrganizerView({ name }: { name: string }) {
+export function OrganizerView({ name, invites }: { name: string; invites: Invite[] }) {
   const [interns, setInterns] = useState<Intern[]>(INTERNS);
 
   /* Swap who owns a task: the receiver takes the sender's task, the sender is freed up. */
@@ -38,7 +40,7 @@ export function OrganizerView({ name }: { name: string }) {
   const feed = [...interns].sort((a, b) => (a.updatedAt === "Just now" ? -1 : b.updatedAt === "Just now" ? 1 : 0));
 
   return (
-    <Shell name={name} role="organizer" title="Organizer dashboard" subtitle="Here is your intern batch today.">
+    <Shell name={name} role="organizer" title="Organizer dashboard" subtitle="Here is your intern batch today." action={<InviteDialog initial={invites} />}>
       <div className="grid gap-5 lg:grid-cols-12">
         <div className="lg:col-span-7">
           <Jarvis interns={interns} onReassign={reassign} />
