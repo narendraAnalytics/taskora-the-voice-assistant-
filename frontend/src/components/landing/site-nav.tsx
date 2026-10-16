@@ -1,10 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Show, SignInButton, UserButton, useUser } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/landing/logo";
 
-const wrap = "mx-auto w-full max-w-[1200px] px-4 sm:px-6 lg:px-8";
+function Greeting() {
+  const { user } = useUser();
+  const name = user?.username ?? user?.firstName;
+  if (!name) return null;
+  return (
+    <span className="font-note max-w-[10rem] truncate text-lg font-bold sm:max-w-[16rem]">Welcome, {name}</span>
+  );
+}
+
+const wrap ="mx-auto w-full max-w-[1200px] px-4 sm:px-6 lg:px-8";
 
 /**
  * No background. Hidden over the hero video, slides in once the visitor scrolls past it,
@@ -59,6 +69,17 @@ export function SiteNav() {
           <a href="#pricing" className="hidden font-semibold hover:text-saffron md:inline">
             Pricing
           </a>
+          <Show when="signed-out">
+            <SignInButton mode="modal">
+              <button type="button" className="rounded-full px-3 py-1.5 font-semibold ring-2 ring-current hover:text-saffron">
+                Sign in
+              </button>
+            </SignInButton>
+          </Show>
+          <Show when="signed-in">
+            <Greeting />
+            <UserButton />
+          </Show>
         </div>
       </div>
     </nav>

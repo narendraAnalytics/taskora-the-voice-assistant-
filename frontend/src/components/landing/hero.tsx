@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Play, Volume2, VolumeX } from "lucide-react";
+import { useAuth, useClerk } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
 import { pilotMailto } from "@/lib/site";
 import { LiquidButton, LiquidGooDefs } from "./liquid-button";
@@ -41,6 +42,8 @@ export function Hero() {
   const [ready, setReady] = useState(false);
   const [petals, setPetals] = useState<Petal[]>([]);
   const [breeze, setBreeze] = useState(false);
+  const { isSignedIn } = useAuth();
+  const { openSignUp } = useClerk();
   const [canReplay, setCanReplay] = useState(false);
   const [replaying, setReplaying] = useState(false);
   const [sound, setSound] = useState(false);
@@ -230,7 +233,11 @@ export function Hero() {
     celebrate();
     window.setTimeout(
       () => {
-        window.location.href = pilotMailto;
+        if (isSignedIn) {
+          document.getElementById("pilot")?.scrollIntoView({ behavior: "smooth" });
+        } else {
+          openSignUp({});
+        }
       },
       prefersReducedMotion() ? 0 : 1400,
     );
