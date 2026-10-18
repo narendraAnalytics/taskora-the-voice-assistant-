@@ -138,6 +138,7 @@ export function CallScreen(props: {
   seconds: number;
   transcript: string;
   error: string | null;
+  notice: string | null;
   log: CallMsg[];
   confirm: CallConfirm | null;
   suggestions: string[];
@@ -149,7 +150,7 @@ export function CallScreen(props: {
   onCancel: () => void;
   onClose: () => void;
 }) {
-  const { mode, levelRef, supported, listening, seconds, transcript, error, log, confirm, suggestions, muted } = props;
+  const { mode, levelRef, supported, listening, seconds, transcript, error, notice, log, confirm, suggestions, muted } = props;
   const reduce = useReducedMotion();
   const [draft, setDraft] = useState("");
   const closeBtn = useRef<HTMLButtonElement>(null);
@@ -252,12 +253,13 @@ export function CallScreen(props: {
                 {youCaption}
               </p>
             )}
-            {error ? (
-              <p className="font-note text-lg text-paper sm:text-xl">{error}</p>
-            ) : (
-              <p className="font-hand text-2xl font-bold leading-snug text-paper sm:text-3xl">
-                <span className="sr-only">Taskora: </span>
-                {lastReply}
+            <p className="font-hand text-2xl font-bold leading-snug text-paper sm:text-3xl">
+              <span className="sr-only">Taskora: </span>
+              {lastReply}
+            </p>
+            {(error ?? notice) && (
+              <p role="alert" className="font-note mx-auto w-fit rounded-full bg-kumkum px-4 py-1.5 text-sm text-paper">
+                {error ?? notice}
               </p>
             )}
           </div>

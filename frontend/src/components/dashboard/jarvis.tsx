@@ -54,7 +54,7 @@ export function Jarvis({
   }, [interns, muted, confirm]);
 
   const internNames = interns.flatMap((i) => [i.name, i.name.split(" ")[0]]);
-  const speechRef = useRef<{ speak: (t: string) => void }>({ speak: () => {} });
+  const speechRef = useRef<{ speak: (t: string) => void; unlock: () => void }>({ speak: () => {}, unlock: () => {} });
 
   const say = useCallback((text: string) => {
     setLog((l) => [...l, { from: "taskora", text }]);
@@ -63,6 +63,7 @@ export function Jarvis({
 
   const handle = useCallback(
     (text: string) => {
+      speechRef.current.unlock();
       setLog((l) => [...l, { from: "you", text }]);
       const hadConfirm = confirmRef.current !== null;
       setConfirm(null);
@@ -83,12 +84,12 @@ export function Jarvis({
     [pending, say],
   );
 
-  const { supported, listening, processing, speaking, mode, transcript, seconds, error, levelRef, start, stop, speak, stopPlayback } =
+  const { supported, listening, processing, speaking, mode, transcript, seconds, error, notice, levelRef, start, stop, speak, stopPlayback, unlockAudio } =
     useSpeech(handle, 15, internNames);
   const reduce = useReducedMotion();
   useEffect(() => {
-    speechRef.current = { speak };
-  }, [speak]);
+    speechRef.current = { speak, unlock: unlockAudio };
+  }, [speak, unlockAudio]);
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
@@ -99,6 +100,7 @@ export function Jarvis({
   // The first time full view opens, Taskora greets you out loud. The click is the user gesture that
   // lets the browser play audio; later opens stay quiet.
   const openFull = () => {
+    unlockAudio();
     setFull(true);
     if (!greeted.current) {
       greeted.current = true;
@@ -144,7 +146,7 @@ export function Jarvis({
           <div>
             <h2 className="font-hand text-4xl font-bold leading-none text-haldi">Ask Taskora</h2>
             <p className="font-note mt-1.5 text-base text-sage">
-              {error ?? (listening ? "Listening… go ahead." : processing ? "Thinking…" : speaking ? "Speaking…" : "Talk to it like Jarvis. It knows your whole batch.")}
+              {error ?? notice ?? (listening ? "Listening… go ahead." : processing ? "Thinking…" : speaking ? "Speaking…" : "Talk to it like Jarvis. It knows your whole batch.")}
             </p>
           </div>
         </div>
@@ -297,6 +299,7 @@ export function Jarvis({
           seconds={seconds}
           transcript={transcript}
           error={error}
+          notice={notice}
           log={log}
           confirm={confirm && from && to ? { task: from.task, fromName: from.name, toName: to.name } : null}
           suggestions={SUGGESTIONS}

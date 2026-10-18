@@ -32,6 +32,7 @@ export function useSpeech(onFinal?: (text: string) => void, maxSeconds = 20, key
   const [supported, setSupported] = useState(true);
   const [seconds, setSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null); // playback trouble, shown without hiding the reply
 
   useEffect(() => {
     cbRef.current = onFinal;
@@ -144,6 +145,8 @@ export function useSpeech(onFinal?: (text: string) => void, maxSeconds = 20, key
         const bytes = await synthesize(text, await getToken(), languageCode);
         if (id !== runId.current) return;
         const ctx = audioCtx();
+        await ctx.resume();
+        if (ctx.state !== "running") throw new Error("audio is locked by the browser");
         const buffer = await ctx.decodeAudioData(bytes);
         if (id !== runId.current) return;
         const src = ctx.createBufferSource();
@@ -177,8 +180,11 @@ export function useSpeech(onFinal?: (text: string) => void, maxSeconds = 20, key
         setSpeaking(true);
         src.start();
         tick();
-      } catch {
-        if (id === runId.current) speakWithBrowser(text);
+        setNotice(null);
+      } catch (e) {
+        if (id !== runId.current) return;
+        setNotice(`Voice playback failed (${e instanceof Error ? e.message : "unknown"}); using the browser voice.`);
+        speakWithBrowser(text);
       }
     },
     [audioCtx, getToken, speakWithBrowser, stopPlayback],
@@ -197,7 +203,10 @@ export function useSpeech(onFinal?: (text: string) => void, maxSeconds = 20, key
     [],
   );
 
+  /** Call from a click/tap so the browser lets audio play later (autoplay policy). */
+  const unlockAudio = useCallback(() => void audioCtx(), [audioCtx]);
+
   const mode: SpeechMode = listening ? "listening" : processing ? "thinking" : speaking ? "speaking" : "idle";
 
-  return { supported, listening, processing, speaking, mode, transcript, seconds, error, levelRef, start, stop, speak, stopPlayback };
+  return { supported, listening, processing, speaking, mode, transcript, seconds, error, notice, levelRef, start, stop, speak, stopPlayback, unlockAudio };
 }
