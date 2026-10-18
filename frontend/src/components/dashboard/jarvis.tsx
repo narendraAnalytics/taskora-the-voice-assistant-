@@ -5,26 +5,29 @@ import { Maximize2, Mic, Send, Square, Volume2 } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Tape } from "@/components/dashboard/motion";
-import { TalkingFace } from "@/components/dashboard/talking-face";
-import { CallScreen } from "@/components/dashboard/call-screen";
+import { TalkingFace, type FaceMood } from "@/components/dashboard/talking-face";
+import { CallScreen, STATUS, ThinkingDots } from "@/components/dashboard/call-screen";
 import { useSpeech } from "@/lib/use-speech";
-import { respond, SUGGESTIONS, type Reply } from "@/lib/jarvis";
+import { closingKind, goodbye, greeting, isNo, isRepeat, isWait, isYes, respond, SUGGESTIONS, type Ctx, type Reply } from "@/lib/jarvis";
 import type { Intern } from "@/lib/demo-data";
 
 type Msg = { from: "you" | "taskora"; text: string };
 type Pending = Extract<Reply, { kind: "clarify" }>;
 type Confirm = Extract<Reply, { kind: "confirm" }>;
+/** What happens after Taskora finishes speaking: open the mic (hands-free) or not. */
+type After = "question" | "listen" | "none";
 
-// After an answer Taskora keeps the conversation going; "no thanks" ends it politely.
-const FOLLOW_UPS = [
-  "Anything else you'd like to know?",
-  "Would you like to know anything more?",
-  "Want me to check on anyone else?",
-];
-const CLOSING =
-  /^s*(no|nope|nah|nothing|nothing else|that'?s all|that is all|no,? thank(s| you)( so much)?|thank(s| you)( so much| very much)?|bye|goodbye|i'?m (good|done|fine)|all good|okay,? thank(s| you))W*$/i;
+// Generic follow-ups, used on every other answer that has no specific next step to offer.
+const FOLLOW_UPS = ["Anything else you'd like to know?", "What else can I check for you?", "Anything else?"];
+const NO_PROBLEM = "No problem. What else can I help with?";
+const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
 
-/** The Jarvis panel: hold a conversation about the batch by voice (or type). */
+/**
+ * The Jarvis panel: hold a conversation about the batch by voice (or type).
+ *
+ * In full view the talk is hands-free: when Taskora finishes a reply the mic opens by itself
+ * (soft chime), and closes quietly if nobody speaks. Tapping the face while it talks interrupts.
+ */
 export function Jarvis({
   name,
   interns,
@@ -38,139 +41,276 @@ export function Jarvis({
   const [log, setLog] = useState<Msg[]>([{ from: "taskora", text: welcome }]);
   const greeted = useRef(false);
   const followUp = useRef(0);
-  const confirmRef = useRef<Confirm | null>(null);
-  const [pending, setPending] = useState<Pending | null>(null);
+  const farewells = useRef(0);
+  const [mood, setMood] = useState<FaceMood>("neutral");
+  const [ended, setEnded] = useState(false);
+  const [napping, setNapping] = useState(false); // hands-free mic opened, nobody spoke
+  const [chips, setChips] = useState<string[]>(SUGGESTIONS);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [draft, setDraft] = useState("");
   const [muted, setMuted] = useState(false);
   const [full, setFull] = useState(false);
+  const [handsFree, setHandsFree] = useState(true);
   const scroller = useRef<HTMLDivElement>(null);
+
+  // Refs for everything the async conversation loop reads, so it never sees stale state.
   const internsRef = useRef(interns);
   const mutedRef = useRef(muted);
+  const confirmRef = useRef<Confirm | null>(null);
+  const pendingRef = useRef<Pending | null>(null);
+  const convo = useRef<Ctx>({});
+  const fullRef = useRef(false);
+  const handsFreeRef = useRef(true);
+  const holdRef = useRef(false); // "wait" / "hold on": don't reopen the mic until tapped
+  const endedRef = useRef(false);
+  const last = useRef<{ shown: string; spoken: string[] } | null>(null);
   useEffect(() => {
-    confirmRef.current = confirm;
     internsRef.current = interns;
     mutedRef.current = muted;
-  }, [interns, muted, confirm]);
+    handsFreeRef.current = handsFree;
+  }, [interns, muted, handsFree]);
+  const setConfirmBoth = (c: Confirm | null) => {
+    confirmRef.current = c;
+    setConfirm(c);
+  };
 
   const internNames = interns.flatMap((i) => [i.name, i.name.split(" ")[0]]);
-  const speechRef = useRef<{ speak: (t: string) => void; unlock: () => void }>({ speak: () => {}, unlock: () => {} });
+  const speechRef = useRef<{
+    speak: (parts: string[]) => Promise<boolean>;
+    unlock: () => void;
+    start: (opts?: { noSpeechMs?: number }) => Promise<void>;
+    chime: () => void;
+    busy: () => boolean;
+  }>({ speak: async () => true, unlock: () => {}, start: async () => {}, chime: () => {}, busy: () => false });
 
-  const say = useCallback((text: string) => {
-    setLog((l) => [...l, { from: "taskora", text }]);
-    if (!mutedRef.current) speechRef.current.speak(text);
+  /** Reopen the mic after Taskora has spoken, when hands-free applies. */
+  const listenAgain = useCallback(async (question: boolean) => {
+    const allowed = () => fullRef.current && handsFreeRef.current && !holdRef.current && !endedRef.current && !speechRef.current.busy();
+    if (!allowed()) return;
+    await sleep(250); // let the last syllable clear the speakers before the mic opens
+    if (!allowed()) return;
+    speechRef.current.chime();
+    void speechRef.current.start({ noSpeechMs: question ? 7000 : 5000 });
   }, []);
+
+  /** Show a reply, speak it (parts are cached and played in order), then maybe listen again. */
+  const reply = useCallback(
+    async (shown: string, spoken: string[] = [shown], after: After = "none") => {
+      setLog((l) => [...l, { from: "taskora", text: shown }]);
+      last.current = { shown, spoken };
+      let ok = true;
+      if (mutedRef.current) await sleep(1200); // give a moment to read
+      else ok = await speechRef.current.speak(spoken);
+      if (ok && after !== "none") void listenAgain(after === "question");
+    },
+    [listenAgain],
+  );
+
+  const confirmYes = useCallback(() => {
+    const c = confirmRef.current;
+    const from = c && internsRef.current.find((i) => i.id === c.fromId);
+    const to = c && internsRef.current.find((i) => i.id === c.toId);
+    if (!c || !from || !to) return;
+    onReassign(c.fromId, c.toId);
+    setConfirmBoth(null);
+    convo.current = { lastId: to.id };
+    const done = `Done. ${from.task} now belongs to ${to.name}.`;
+    void reply(`${done} Anything else?`, [done, "Anything else?"], "question");
+  }, [onReassign, reply]);
+
+  const confirmNo = useCallback(() => {
+    setConfirmBoth(null);
+    void reply("Okay, nothing changed. Anything else?", ["Okay, nothing changed.", "Anything else?"], "question");
+  }, [reply]);
 
   const handle = useCallback(
     (text: string) => {
       speechRef.current.unlock();
+      holdRef.current = false;
+      endedRef.current = false;
+      setEnded(false);
+      setNapping(false);
+      setMood("neutral");
       setLog((l) => [...l, { from: "you", text }]);
+
+      // An open confirm card can be answered by voice.
+      if (confirmRef.current && isYes(text)) return confirmYes();
+      if (confirmRef.current && isNo(text)) return confirmNo();
       const hadConfirm = confirmRef.current !== null;
-      setConfirm(null);
-      if (!pending && CLOSING.test(text)) {
-        say(
-          hadConfirm
-            ? "Okay, nothing changed. I'm here whenever you need me, just tap me and ask."
-            : "No problem! I'm here whenever you need me, just tap me and ask.",
-        );
-        return;
+      setConfirmBoth(null);
+
+      if (isWait(text)) {
+        holdRef.current = true;
+        return void reply("Sure, take your time. Tap me when you're ready.");
       }
-      const r = respond(internsRef.current, text, pending ?? undefined);
-      setPending(r.kind === "clarify" ? r : null);
-      if (r.kind === "confirm") setConfirm(r);
-      const next = FOLLOW_UPS[followUp.current++ % FOLLOW_UPS.length];
-      say(r.kind === "answer" ? `${r.text} ${next}` : r.text);
+      if (isRepeat(text) && last.current) return void reply(last.current.shown, last.current.spoken, "question");
+
+      const offer = convo.current.offer;
+      if (!pendingRef.current && offer?.run && isNo(text)) {
+        convo.current = { lastId: convo.current.lastId };
+        return void reply(NO_PROBLEM, [NO_PROBLEM], "question");
+      }
+
+      const closing = pendingRef.current ? null : closingKind(text);
+      if (closing) {
+        const bye = goodbye(closing, farewells.current++);
+        endedRef.current = true;
+        setEnded(true);
+        setMood("happy");
+        setChips(SUGGESTIONS);
+        convo.current = {};
+        return void reply(hadConfirm ? `Okay, nothing changed. ${bye}` : bye);
+      }
+
+      const r = respond(internsRef.current, text, pendingRef.current ?? undefined, convo.current);
+      pendingRef.current = r.kind === "clarify" ? r : null;
+      convo.current = {
+        lastId: (r.kind === "answer" && r.about) || (r.kind === "confirm" && r.fromId) || convo.current.lastId,
+        offer: r.kind === "answer" ? r.offer : undefined,
+      };
+      if (r.kind === "confirm") {
+        setConfirmBoth(r);
+        return void reply(r.text, [r.text], "question");
+      }
+      if (r.kind === "clarify") {
+        setChips(r.options.map((o) => o.name));
+        return void reply(r.text, [r.text], "question");
+      }
+      setChips([...new Set(r.chips ?? SUGGESTIONS)]);
+      const n = followUp.current++;
+      const follow = r.offer?.ask ?? (n % 2 === 0 ? FOLLOW_UPS[(n / 2) % FOLLOW_UPS.length] : null);
+      void reply(follow ? `${r.text} ${follow}` : r.text, [r.speak ?? r.text, ...(follow ? [follow] : [])], follow ? "question" : "listen");
     },
-    [pending, say],
+    [confirmNo, confirmYes, reply],
   );
 
-  const { supported, listening, processing, speaking, mode, transcript, seconds, error, notice, levelRef, start, stop, speak, stopPlayback, unlockAudio } =
-    useSpeech(handle, 15, internNames);
+  const { supported, listening, processing, speaking, mode, transcript, seconds, error, notice, levelRef, start, stop, cancel, speak, prefetch, chime, stopPlayback, unlockAudio, releaseMic } =
+    useSpeech(handle, 15, internNames, { keepMicMs: full ? 15000 : 0, onNoSpeech: () => setNapping(true) });
   const reduce = useReducedMotion();
+  const busyRef = useRef(false);
   useEffect(() => {
-    speechRef.current = { speak, unlock: unlockAudio };
-  }, [speak, unlockAudio]);
+    busyRef.current = listening || processing;
+  }, [listening, processing]);
+  useEffect(() => {
+    speechRef.current = { speak, unlock: unlockAudio, start, chime, busy: () => busyRef.current };
+  }, [speak, unlockAudio, start, chime]);
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
-  }, [log, transcript, confirm]);
+  }, [log, transcript, confirm, processing]);
+
+  // The happy face lingers a few seconds after a greeting or goodbye has been spoken.
+  useEffect(() => {
+    if (mood !== "happy" || speaking) return;
+    const t = window.setTimeout(() => setMood("neutral"), 4000);
+    return () => window.clearTimeout(t);
+  }, [mood, speaking]);
 
   const from = confirm && interns.find((i) => i.id === confirm.fromId);
   const to = confirm && interns.find((i) => i.id === confirm.toId);
-  // The first time full view opens, Taskora greets you out loud. The click is the user gesture that
-  // lets the browser play audio; later opens stay quiet.
+  // The first time full view opens, Taskora greets you out loud and then listens. The click is the
+  // user gesture that lets the browser play audio; later opens stay quiet.
   const openFull = () => {
     unlockAudio();
+    fullRef.current = true;
     setFull(true);
-    if (!greeted.current) {
-      greeted.current = true;
-      if (!mutedRef.current) speak(welcome);
-    }
+    if (greeted.current) return;
+    greeted.current = true;
+    // Time of day comes from the viewer's clock, so it is only worked out here (not during SSR).
+    const hello = greeting(name);
+    setLog((l) => (l.length === 1 && l[0].text === welcome ? [{ from: "taskora", text: hello }] : [...l, { from: "taskora", text: hello }]));
+    last.current = { shown: hello, spoken: [hello] };
+    setMood("happy");
+    if (!mutedRef.current)
+      void speak([hello]).then((ok) => {
+        if (ok) void listenAgain(true);
+      });
+    // Warm the cache with phrases that come up in most conversations.
+    window.setTimeout(() => prefetch([...FOLLOW_UPS, NO_PROBLEM, "Anything else?", goodbye("thanks", farewells.current)]), 2500);
+  };
+  const closeFull = () => {
+    fullRef.current = false;
+    setFull(false);
+    if (listening) cancel();
+    releaseMic();
   };
   const toggleMute = () => {
     setMuted((m) => !m);
     stopPlayback();
   };
-  const toggleMic = () => void (listening ? stop() : start());
-  const confirmYes = () => {
-    if (!confirm || !from || !to) return;
-    onReassign(confirm.fromId, confirm.toId);
-    setConfirm(null);
-    say(`Done. ${from.task} now belongs to ${to.name}.`);
+  /** Tap: interrupt Taskora and listen, or stop listening. */
+  const toggleMic = () => {
+    holdRef.current = false;
+    endedRef.current = false;
+    setEnded(false);
+    setNapping(false);
+    void (listening ? stop() : start());
   };
-  const confirmNo = () => {
-    setConfirm(null);
-    say("Okay, nothing changed.");
+  const toggleHandsFree = () => {
+    setHandsFree((h) => !h);
+    if (listening && handsFree) cancel();
   };
+  const hint = error ?? notice ?? (ended || napping ? "Tap my face whenever you need me." : "Talk to it like Jarvis. It knows your whole batch.");
 
   return (
     <section
       aria-label="Taskora voice assistant"
       className="relative flex min-h-[26rem] flex-col overflow-hidden rounded-[2rem] bg-neem p-5 text-paper sm:p-7"
     >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -right-24 -top-24 size-80 rounded-full bg-saffron/30 blur-3xl"
-      />
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <div className={cn("absolute -right-24 -top-24 size-80 rounded-full bg-saffron/30 blur-3xl", !full && "motion-safe:animate-[aurora_18s_ease-in-out_infinite]")} />
+        <div className={cn("absolute -bottom-32 -left-20 size-72 rounded-full bg-tulsi/20 blur-3xl", !full && "motion-safe:animate-[aurora_24s_ease-in-out_infinite_reverse]")} />
+        <div className="absolute inset-0 opacity-[0.08] [background-image:radial-gradient(#fce7b2_1px,transparent_1px)] [background-size:18px_18px] [mask-image:linear-gradient(to_bottom,#173f30,transparent_60%)]" />
+      </div>
       <div className="relative flex items-start justify-between gap-3">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 sm:gap-6">
           <button
             type="button"
-            onClick={listening ? stop : start}
+            onClick={toggleMic}
             disabled={!supported}
             aria-label={listening ? "Stop listening" : "Talk to Taskora"}
-            className="size-28 shrink-0 rounded-full transition-transform hover:scale-105 active:scale-95 disabled:cursor-default sm:size-36"
+            className="size-28 shrink-0 rounded-full p-2 transition-transform hover:scale-105 active:scale-95 disabled:cursor-default sm:size-36"
           >
-            <TalkingFace mode={mode} levelRef={levelRef} className="size-full" />
+            {/* paused while the full view is open: only one face animates at a time */}
+            <TalkingFace mode={mode} mood={mood} levelRef={levelRef} paused={full} className="size-full" />
           </button>
           <div>
             <h2 className="font-hand text-4xl font-bold leading-none text-haldi">Ask Taskora</h2>
-            <p className="font-note mt-1.5 text-base text-sage">
-              {error ?? notice ?? (listening ? "Listening… go ahead." : processing ? "Thinking…" : speaking ? "Speaking…" : "Talk to it like Jarvis. It knows your whole batch.")}
-            </p>
+            <span role="status" className="mt-2 inline-flex items-center gap-2 rounded-full bg-neem-soft px-3 py-1 text-sm font-semibold">
+              <span
+                aria-hidden
+                className={cn(
+                  "size-2.5 rounded-full",
+                  mode === "idle" ? "bg-tulsi" : mode === "listening" ? "animate-pulse bg-saffron" : mode === "thinking" ? "animate-pulse bg-haldi" : "bg-tulsi",
+                )}
+              />
+              {STATUS[mode]}
+              {listening && <span className="tabular-nums text-sage">{seconds}s</span>}
+            </span>
+            <p className="font-note mt-1.5 text-base text-sage">{hint}</p>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-        <button
-          type="button"
-          onClick={openFull}
-          aria-label="Open full screen"
-          className="grid size-10 place-items-center rounded-full bg-neem-soft text-paper transition-colors hover:bg-haldi hover:text-neem"
-        >
-          <Maximize2 className="size-5" aria-hidden />
-        </button>
-        <button
-          type="button"
-          onClick={toggleMute}
-          aria-pressed={muted}
-          aria-label={muted ? "Turn spoken replies on" : "Mute spoken replies"}
-          className={cn(
-            "grid size-10 shrink-0 place-items-center rounded-full transition-colors",
-            muted ? "bg-neem-soft text-sage" : "bg-haldi text-neem",
-          )}
-        >
-          <Volume2 className="size-5" aria-hidden />
-        </button>
+          <button
+            type="button"
+            onClick={openFull}
+            aria-label="Open full screen"
+            className="grid size-10 place-items-center rounded-full bg-neem-soft text-paper transition-colors hover:bg-haldi hover:text-neem"
+          >
+            <Maximize2 className="size-5" aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={toggleMute}
+            aria-pressed={muted}
+            aria-label={muted ? "Turn spoken replies on" : "Mute spoken replies"}
+            className={cn(
+              "grid size-10 shrink-0 place-items-center rounded-full transition-colors",
+              muted ? "bg-neem-soft text-sage" : "bg-haldi text-neem",
+            )}
+          >
+            <Volume2 className="size-5" aria-hidden />
+          </button>
         </div>
       </div>
 
@@ -199,6 +339,11 @@ export function Jarvis({
             {transcript || "Listening…"}
           </p>
         )}
+        {processing && (
+          <p className="w-fit rounded-2xl rounded-bl-md bg-neem-soft px-4 py-3.5">
+            <ThinkingDots />
+          </p>
+        )}
         {confirm && from && to && (
           <motion.div
             initial={reduce ? false : { opacity: 0, y: 20, rotate: -3 }}
@@ -214,21 +359,14 @@ export function Jarvis({
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  onReassign(confirm.fromId, confirm.toId);
-                  setConfirm(null);
-                  say(`Done. ${from.task} now belongs to ${to.name}.`);
-                }}
+                onClick={confirmYes}
                 className="rounded-full bg-saffron px-4 py-2 text-sm font-bold text-neem hover:bg-[#ef7740]"
               >
                 Confirm
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setConfirm(null);
-                  say("Okay, nothing changed.");
-                }}
+                onClick={confirmNo}
                 className="rounded-full px-4 py-2 text-sm font-bold ring-2 ring-neem hover:bg-paper-deep"
               >
                 Cancel
@@ -239,7 +377,7 @@ export function Jarvis({
       </div>
 
       <div className="relative mt-4 flex flex-wrap gap-2">
-        {SUGGESTIONS.map((s) => (
+        {chips.map((s) => (
           <button
             key={s}
             type="button"
@@ -262,7 +400,7 @@ export function Jarvis({
       >
         <button
           type="button"
-          onClick={listening ? stop : start}
+          onClick={toggleMic}
           disabled={!supported}
           aria-label={listening ? "Stop listening" : "Start talking"}
           className={cn(
@@ -293,6 +431,8 @@ export function Jarvis({
       {full && (
         <CallScreen
           mode={mode}
+          mood={mood}
+          ended={ended || napping}
           levelRef={levelRef}
           supported={supported}
           listening={listening}
@@ -302,14 +442,16 @@ export function Jarvis({
           notice={notice}
           log={log}
           confirm={confirm && from && to ? { task: from.task, fromName: from.name, toName: to.name } : null}
-          suggestions={SUGGESTIONS}
+          suggestions={chips}
           muted={muted}
+          handsFree={handsFree}
+          onToggleHandsFree={toggleHandsFree}
           onToggleMute={toggleMute}
           onMic={toggleMic}
           onSend={handle}
           onConfirm={confirmYes}
           onCancel={confirmNo}
-          onClose={() => setFull(false)}
+          onClose={closeFull}
         />
       )}
       {listening && (

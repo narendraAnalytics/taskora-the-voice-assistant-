@@ -95,7 +95,7 @@ export function InternView({ name }: { name: string }) {
               </svg>
               <button
                 type="button"
-                onClick={listening ? stop : start}
+                onClick={listening ? stop : () => start()}
                 disabled={!supported}
                 aria-label={listening ? "Stop recording" : "Start your standup"}
                 className={cn(

@@ -2,22 +2,38 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { Mic, Minimize2, Send, Square, Volume2 } from "lucide-react";
+import { Headphones, Mic, Minimize2, Send, Square, Volume2 } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Tape } from "@/components/dashboard/motion";
-import { TalkingFace } from "@/components/dashboard/talking-face";
+import { TalkingFace, type FaceMood } from "@/components/dashboard/talking-face";
 import type { SpeechMode } from "@/lib/use-speech";
 
 export type CallMsg = { from: "you" | "taskora"; text: string };
 export type CallConfirm = { task: string; fromName: string; toName: string };
 
-const STATUS: Record<SpeechMode, string> = {
+export const STATUS: Record<SpeechMode, string> = {
   idle: "Ready",
   listening: "Listening",
   thinking: "Thinking",
   speaking: "Speaking",
 };
+
+/** Three bouncing dots: Taskora is working on a reply. */
+export function ThinkingDots({ className }: { className?: string }) {
+  return (
+    <span aria-label="Taskora is thinking" role="status" className={cn("inline-flex items-center gap-1.5", className)}>
+      {[0, 0.15, 0.3].map((d) => (
+        <span
+          key={d}
+          aria-hidden
+          className="size-2 rounded-full bg-haldi motion-safe:animate-bounce"
+          style={{ animationDelay: `${d}s` }}
+        />
+      ))}
+    </span>
+  );
+}
 
 
 const BLOBS = [
@@ -28,8 +44,8 @@ const BLOBS = [
 ];
 // Marigold petals drifting upward: [left %, size px, seconds, delay s]
 const PETALS = [
-  [6, 10, 16, 0], [14, 7, 21, 4], [23, 12, 18, 9], [33, 8, 24, 2], [42, 11, 19, 12], [51, 7, 22, 6],
-  [60, 13, 17, 1], [69, 8, 25, 10], [77, 10, 20, 5], [85, 7, 23, 13], [92, 12, 18, 8], [97, 9, 26, 3],
+  [6, 10, 16, 0], [19, 12, 18, 9], [33, 8, 24, 2], [47, 11, 19, 12],
+  [60, 13, 17, 1], [73, 8, 25, 10], [85, 10, 20, 5], [95, 12, 18, 8],
 ] as const;
 
 /** Living background: drifting colour washes, ripples from behind the face, rising petals. */
@@ -39,6 +55,12 @@ function Backdrop({ mode }: { mode: SpeechMode }) {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_35%,#24543f_0%,#173f30_65%)]" />
+      {/* warm spotlight behind the face; brightens while someone is talking */}
+      <motion.div
+        className="absolute left-1/2 top-[38%] size-[34rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,#f2b33d55_0%,#e8622a22_45%,transparent_70%)]"
+        animate={reduce ? undefined : { scale: lively ? [1, 1.12, 1] : [1, 1.04, 1], opacity: lively ? 1 : 0.7 }}
+        transition={{ duration: lively ? 2.2 : 6, repeat: Infinity, ease: "easeInOut" }}
+      />
       {BLOBS.map((b, i) => (
         <motion.div
           key={i}
@@ -49,7 +71,7 @@ function Backdrop({ mode }: { mode: SpeechMode }) {
       ))}
       {/* ripples that spread from behind the face; faster while someone is talking */}
       {!reduce &&
-        [0, 1, 2, 3].map((i) => (
+        [0, 1, 2].map((i) => (
           <motion.span
             key={i}
             className={cn(
@@ -58,7 +80,7 @@ function Backdrop({ mode }: { mode: SpeechMode }) {
             )}
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: [0.8, 2.6], opacity: [0, lively ? 0.6 : 0.25, 0] }}
-            transition={{ duration: lively ? 4 : 8, repeat: Infinity, delay: i * (lively ? 1 : 2), ease: "easeOut" }}
+            transition={{ duration: lively ? 4 : 8, repeat: Infinity, delay: i * (lively ? 1.3 : 2.6), ease: "easeOut" }}
           />
         ))}
       {/* petals */}
@@ -126,12 +148,35 @@ function LevelBars({ mode, levelRef }: { mode: SpeechMode; levelRef: RefObject<n
   );
 }
 
+/** Taskora's latest reply, revealed word by word like live captions. */
+function RevealText({ text }: { text: string }) {
+  const reduce = useReducedMotion();
+  if (reduce) return <>{text}</>;
+  return (
+    <span key={text}>
+      {text.split(" ").map((w, i) => (
+        <motion.span
+          key={i}
+          className="inline-block whitespace-pre"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: Math.min(i * 0.06, 2.4), duration: 0.35 }}
+        >
+          {w + " "}
+        </motion.span>
+      ))}
+    </span>
+  );
+}
+
 /**
  * Full-screen "call" with Taskora: a big face in the middle, live captions under it, the whole
  * conversation on the side (desktop), and one large mic button. Esc or the close button leaves.
  */
 export function CallScreen(props: {
   mode: SpeechMode;
+  mood: FaceMood;
+  ended: boolean;
   levelRef: RefObject<number>;
   supported: boolean;
   listening: boolean;
@@ -143,6 +188,8 @@ export function CallScreen(props: {
   confirm: CallConfirm | null;
   suggestions: string[];
   muted: boolean;
+  handsFree: boolean;
+  onToggleHandsFree: () => void;
   onToggleMute: () => void;
   onMic: () => void;
   onSend: (text: string) => void;
@@ -150,7 +197,7 @@ export function CallScreen(props: {
   onCancel: () => void;
   onClose: () => void;
 }) {
-  const { mode, levelRef, supported, listening, seconds, transcript, error, notice, log, confirm, suggestions, muted } = props;
+  const { mode, mood, ended, levelRef, supported, listening, seconds, transcript, error, notice, log, confirm, suggestions, muted, handsFree } = props;
   const reduce = useReducedMotion();
   const [draft, setDraft] = useState("");
   const closeBtn = useRef<HTMLButtonElement>(null);
@@ -175,7 +222,7 @@ export function CallScreen(props: {
 
   const lastReply = [...log].reverse().find((m) => m.from === "taskora")?.text ?? "";
   const lastYou = [...log].reverse().find((m) => m.from === "you")?.text ?? "";
-  const youCaption = listening ? transcript || "Go ahead, I'm listening…" : mode === "thinking" ? "…" : lastYou;
+  const youCaption = listening ? transcript || "Go ahead, I'm listening…" : lastYou;
 
   // Portal to <body>: the dashboard cards are tilted/animated, and a transformed ancestor would
   // turn "fixed" into "relative to that card".
@@ -210,6 +257,19 @@ export function CallScreen(props: {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={props.onToggleHandsFree}
+            aria-pressed={handsFree}
+            className={cn(
+              "flex h-11 items-center gap-2 rounded-full px-4 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-saffron",
+              handsFree ? "bg-tulsi text-neem" : "bg-neem-soft text-sage",
+            )}
+          >
+            <Headphones className="size-5" aria-hidden />
+            <span className="hidden sm:inline">Hands-free {handsFree ? "on" : "off"}</span>
+            <span className="sr-only sm:hidden">Hands-free {handsFree ? "on" : "off"}</span>
+          </button>
+          <button
+            type="button"
             onClick={props.onToggleMute}
             aria-pressed={muted}
             aria-label={muted ? "Turn spoken replies on" : "Mute spoken replies"}
@@ -240,9 +300,9 @@ export function CallScreen(props: {
             onClick={props.onMic}
             disabled={!supported}
             aria-label={listening ? "Stop listening" : "Talk to Taskora"}
-            className="aspect-square w-[min(44svh,22rem)] shrink-0 rounded-full transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-default"
+            className="aspect-square w-[min(40svh,20rem)] shrink-0 rounded-full p-4 transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-default"
           >
-            <TalkingFace mode={mode} levelRef={levelRef} className="size-full" />
+            <TalkingFace mode={mode} mood={mood} levelRef={levelRef} className="size-full" />
           </button>
           <LevelBars mode={mode} levelRef={levelRef} />
 
@@ -253,10 +313,24 @@ export function CallScreen(props: {
                 {youCaption}
               </p>
             )}
-            <p className="font-hand text-2xl font-bold leading-snug text-paper sm:text-3xl">
-              <span className="sr-only">Taskora: </span>
-              {lastReply}
-            </p>
+            {mode === "thinking" ? (
+              <ThinkingDots className="py-3" />
+            ) : (
+              <p className="font-hand text-2xl font-bold leading-snug text-paper sm:text-3xl">
+                <span className="sr-only">Taskora: </span>
+                <RevealText text={lastReply} />
+              </p>
+            )}
+            {ended && mode === "idle" && (
+              <motion.p
+                initial={reduce ? false : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6 }}
+                className="font-note mx-auto w-fit rounded-full bg-neem-soft px-4 py-1.5 text-sm text-sage"
+              >
+                Tap my face or the mic whenever you need me
+              </motion.p>
+            )}
             {(error ?? notice) && (
               <p role="alert" className="font-note mx-auto w-fit rounded-full bg-kumkum px-4 py-1.5 text-sm text-paper">
                 {error ?? notice}

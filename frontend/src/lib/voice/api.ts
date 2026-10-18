@@ -28,7 +28,8 @@ export async function synthesize(text: string, token: string | null, languageCod
     await fetch(`${BASE}/voice/tts`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ text, language_code: languageCode }),
+      // mp3 is ~3x smaller than wav; an older backend ignores `codec` and sends wav, which decodes too.
+      body: JSON.stringify({ text, language_code: languageCode, codec: "mp3" }),
     }),
   );
   return res.arrayBuffer();
