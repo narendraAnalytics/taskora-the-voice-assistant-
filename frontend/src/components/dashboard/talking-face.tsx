@@ -37,9 +37,16 @@ function mouthGeo(open: number, round: number, smile: number) {
   return { hw, yc, yt, d: `M${CX - hw} ${yc}Q${CX} ${yt} ${CX + hw} ${yc}Q${CX} ${yb} ${CX - hw} ${yc}Z` };
 }
 
-/** Upper teeth: a band that hangs `h` below the upper lip (clipped to the mouth). */
+/**
+ * Upper teeth: a soft, rounded row hanging `h` below the upper lip, narrower than the mouth so the
+ * corners stay dark (clipped to the mouth; anything above the lip is hidden).
+ */
 function teethPath({ hw, yc, yt }: { hw: number; yc: number; yt: number }, h: number) {
-  return `M${CX - hw} ${yc - 2}Q${CX} ${yt - 2} ${CX + hw} ${yc - 2}L${CX + hw} ${yc + h}Q${CX} ${yt + h} ${CX - hw} ${yc + h}Z`;
+  const w = hw * 0.7;
+  const t = (hw - w) / (2 * hw);
+  const edge = yc + 2 * t * (1 - t) * (yt - yc); // upper lip height where the teeth end
+  const top = Math.min(yc, yt) - 6;
+  return `M${CX - w} ${top}L${CX + w} ${top}L${CX + w} ${edge + h * 0.5}Q${CX} ${yt + h * 1.6} ${CX - w} ${edge + h * 0.5}Z`;
 }
 
 function dimples(hw: number, yc: number) {
@@ -149,7 +156,7 @@ export function TalkingFace({
       mouth.current?.setAttribute("d", g.d);
       clip.current?.setAttribute("d", g.d);
       mouth.current?.setAttribute("fill", open > 0.07 ? MOUTH_IN : LIPS);
-      teeth.current?.setAttribute("d", teethPath(g, clamp(open * 14 + p.grin * 4, 0, 9)));
+      teeth.current?.setAttribute("d", teethPath(g, clamp(open * 8 + p.grin * 4, 0, 5)));
       tongue.current?.setAttribute("cy", String(CY + 8 + open * 26));
       tongue.current?.setAttribute("opacity", open > 0.25 ? "1" : "0");
       dimple.current?.setAttribute("d", dimples(g.hw, g.yc));
