@@ -60,3 +60,6 @@ venv/
 
 # ---- Video (rendered locally, not committed) ----
 *.mp4
+
+# ---- Backend lives in its own repository ----
+backend/

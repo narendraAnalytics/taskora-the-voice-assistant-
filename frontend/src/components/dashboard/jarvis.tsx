@@ -5,7 +5,7 @@ import { Mic, Send, Square, Volume2 } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Tape } from "@/components/dashboard/motion";
-import { VoiceOrb } from "@/components/dashboard/voice-orb";
+import { TalkingFace } from "@/components/dashboard/talking-face";
 import { useSpeech } from "@/lib/use-speech";
 import { respond, SUGGESTIONS, type Reply } from "@/lib/jarvis";
 import type { Intern } from "@/lib/demo-data";
@@ -31,6 +31,7 @@ export function Jarvis({ interns, onReassign }: { interns: Intern[]; onReassign:
     mutedRef.current = muted;
   }, [interns, muted]);
 
+  const internNames = interns.flatMap((i) => [i.name, i.name.split(" ")[0]]);
   const speechRef = useRef<{ speak: (t: string) => void }>({ speak: () => {} });
 
   const say = useCallback((text: string) => {
@@ -50,7 +51,8 @@ export function Jarvis({ interns, onReassign }: { interns: Intern[]; onReassign:
     [pending, say],
   );
 
-  const { supported, listening, speaking, transcript, seconds, start, stop, speak } = useSpeech(handle, 15);
+  const { supported, listening, processing, speaking, mode, transcript, seconds, error, levelRef, start, stop, speak, stopPlayback } =
+    useSpeech(handle, 15, internNames);
   const reduce = useReducedMotion();
   useEffect(() => {
     speechRef.current = { speak };
@@ -79,14 +81,14 @@ export function Jarvis({ interns, onReassign }: { interns: Intern[]; onReassign:
             onClick={listening ? stop : start}
             disabled={!supported}
             aria-label={listening ? "Stop listening" : "Talk to Taskora"}
-            className="size-20 shrink-0 rounded-full transition-transform hover:scale-105 active:scale-95 disabled:cursor-default sm:size-24"
+            className="size-28 shrink-0 rounded-full transition-transform hover:scale-105 active:scale-95 disabled:cursor-default sm:size-36"
           >
-            <VoiceOrb mode={listening ? "listening" : speaking ? "speaking" : "idle"} className="size-full" />
+            <TalkingFace mode={mode} levelRef={levelRef} className="size-full" />
           </button>
           <div>
             <h2 className="font-hand text-4xl font-bold leading-none text-haldi">Ask Taskora</h2>
             <p className="font-note mt-1.5 text-base text-sage">
-              {listening ? "Listening… go ahead." : speaking ? "Speaking…" : "Talk to it like Jarvis. It knows your whole batch."}
+              {error ?? (listening ? "Listening… go ahead." : processing ? "Thinking…" : speaking ? "Speaking…" : "Talk to it like Jarvis. It knows your whole batch.")}
             </p>
           </div>
         </div>
@@ -94,7 +96,7 @@ export function Jarvis({ interns, onReassign }: { interns: Intern[]; onReassign:
           type="button"
           onClick={() => {
             setMuted((m) => !m);
-            window.speechSynthesis?.cancel();
+            stopPlayback();
           }}
           aria-pressed={muted}
           aria-label={muted ? "Turn spoken replies on" : "Mute spoken replies"}
@@ -210,7 +212,7 @@ export function Jarvis({ interns, onReassign }: { interns: Intern[]; onReassign:
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder={supported ? (listening ? `Listening… ${seconds}s` : "Tap the mic or type a question") : "Type a question (voice needs Chrome or Edge)"}
+            placeholder={supported ? (listening ? `Listening… ${seconds}s` : "Tap the mic or type a question") : "Type a question (voice needs a newer browser)"}
             aria-label="Type a question for Taskora"
             className="h-12 w-full rounded-full bg-neem-soft px-5 pr-12 text-paper placeholder:text-sage focus:outline-none focus-visible:ring-2 focus-visible:ring-haldi"
           />

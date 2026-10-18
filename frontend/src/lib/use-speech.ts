@@ -1,108 +1,198 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
+import { startRecorder, type Recorder } from "@/lib/voice/recorder";
+import { synthesize, transcribe } from "@/lib/voice/api";
 
 /*
- * Speech I/O behind one hook so the provider can change. Today it uses the browser's Web Speech
- * API (free, no keys). The plan is Sarvam saaras:v3 (STT) + bulbul:v3 (TTS) via server routes —
- * swap the internals of start()/speak() and nothing in the UI changes.
+ * Speech I/O behind one hook so the provider can change. Hearing and speaking go through the
+ * Taskora FastAPI backend (Sarvam saaras:v4 / bulbul:v4-flash); if speaking fails it falls back
+ * to the browser voice. `levelRef` (0..1) carries live loudness — mic while listening, reply audio
+ * while speaking — so the avatar can move without re-rendering React.
  */
 
-type Rec = {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-};
+export type SpeechMode = "idle" | "listening" | "thinking" | "speaking";
 
-function getRecognition(): (new () => Rec) | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as { SpeechRecognition?: new () => Rec; webkitSpeechRecognition?: new () => Rec };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
-
-export function useSpeech(onFinal?: (text: string) => void, maxSeconds = 20) {
-  const recRef = useRef<Rec | null>(null);
+export function useSpeech(onFinal?: (text: string) => void, maxSeconds = 20, keyterms: string[] = []) {
+  const { getToken } = useAuth();
+  const recRef = useRef<Recorder | null>(null);
   const timer = useRef<number | undefined>(undefined);
-  const finalRef = useRef("");
   const cbRef = useRef(onFinal);
+  const termsRef = useRef(keyterms);
+  const levelRef = useRef(0);
+  const ctxRef = useRef<AudioContext | null>(null);
+  const playRef = useRef<{ stop: () => void } | null>(null);
+  const runId = useRef(0); // lets a newer start()/speak() cancel an older one mid-flight
   const [listening, setListening] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [supported, setSupported] = useState(true);
   const [seconds, setSeconds] = useState(0);
-  const [speaking, setSpeaking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     cbRef.current = onFinal;
-  }, [onFinal]);
-  useEffect(() => setSupported(!!getRecognition()), []);
-
-  const stop = useCallback(() => {
-    window.clearInterval(timer.current);
-    recRef.current?.stop();
+    termsRef.current = keyterms;
+  });
+  useEffect(() => {
+    setSupported(
+      typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof AudioWorkletNode !== "undefined",
+    );
   }, []);
 
-  const start = useCallback(() => {
-    const Ctor = getRecognition();
-    if (!Ctor) return;
+  const audioCtx = useCallback(() => {
+    ctxRef.current ??= new AudioContext();
+    void ctxRef.current.resume();
+    return ctxRef.current;
+  }, []);
+
+  const stopPlayback = useCallback(() => {
+    playRef.current?.stop();
+    playRef.current = null;
     window.speechSynthesis?.cancel();
-    const rec = new Ctor();
-    rec.lang = "en-IN";
-    rec.interimResults = true;
-    rec.continuous = true;
-    finalRef.current = "";
+    levelRef.current = 0;
+    setSpeaking(false);
+  }, []);
+
+  const stop = useCallback(async () => {
+    window.clearInterval(timer.current);
+    const rec = recRef.current;
+    if (!rec) return;
+    recRef.current = null;
+    setListening(false);
+    const id = ++runId.current;
+    setProcessing(true);
+    try {
+      const wav = await rec.finish();
+      const out = await transcribe(wav, await getToken(), termsRef.current);
+      if (id !== runId.current) return;
+      const text = out.text.trim();
+      setTranscript(text);
+      if (text) cbRef.current?.(text);
+    } catch {
+      if (id === runId.current) setError("I couldn't hear that. Check the voice service and try again.");
+    } finally {
+      if (id === runId.current) setProcessing(false);
+    }
+  }, [getToken]);
+
+  const stopRef = useRef(stop);
+  useEffect(() => {
+    stopRef.current = stop;
+  }, [stop]);
+
+  const start = useCallback(async () => {
+    stopPlayback();
+    audioCtx(); // unlock playback while we still have the tap that started this
+    setError(null);
     setTranscript("");
     setSeconds(0);
-    rec.onresult = (e) => {
-      let text = "";
-      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
-      finalRef.current = text;
-      setTranscript(text);
-    };
-    const finish = () => {
-      window.clearInterval(timer.current);
-      setListening(false);
-      const text = finalRef.current.trim();
-      if (text) cbRef.current?.(text);
-    };
-    rec.onend = finish;
-    rec.onerror = finish;
-    recRef.current = rec;
-    rec.start();
+    try {
+      recRef.current = await startRecorder({
+        onLevel: (l) => (levelRef.current = l),
+        onSilence: () => void stopRef.current(),
+      });
+    } catch {
+      setError("Microphone is blocked. Allow it in the browser and try again.");
+      return;
+    }
     setListening(true);
     const startedAt = Date.now();
     timer.current = window.setInterval(() => {
       const s = Math.floor((Date.now() - startedAt) / 1000);
       setSeconds(s);
-      if (s >= maxSeconds) rec.stop();
+      if (s >= maxSeconds) void stopRef.current();
     }, 250);
-  }, [maxSeconds]);
+  }, [audioCtx, maxSeconds, stopPlayback]);
 
-  const speak = useCallback((text: string) => {
+  const speakWithBrowser = useCallback((text: string) => {
     const synth = window.speechSynthesis;
     if (!synth) return;
-    synth.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "en-IN";
-    u.rate = 1.02;
-    u.onstart = () => setSpeaking(true);
-    u.onend = () => setSpeaking(false);
-    u.onerror = () => setSpeaking(false);
+    let raf = 0;
+    const wiggle = () => {
+      levelRef.current = 0.25 + 0.35 * Math.abs(Math.sin(performance.now() / 110)); // no real signal; fake mouth
+      raf = requestAnimationFrame(wiggle);
+    };
+    u.onstart = () => {
+      setSpeaking(true);
+      wiggle();
+    };
+    const end = () => {
+      cancelAnimationFrame(raf);
+      levelRef.current = 0;
+      setSpeaking(false);
+    };
+    u.onend = end;
+    u.onerror = end;
+    synth.cancel();
     synth.speak(u);
   }, []);
 
+  const speak = useCallback(
+    async (text: string, languageCode = "en-IN") => {
+      stopPlayback();
+      const id = ++runId.current;
+      try {
+        const bytes = await synthesize(text, await getToken(), languageCode);
+        if (id !== runId.current) return;
+        const ctx = audioCtx();
+        const buffer = await ctx.decodeAudioData(bytes);
+        if (id !== runId.current) return;
+        const src = ctx.createBufferSource();
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        src.buffer = buffer;
+        src.connect(analyser).connect(ctx.destination);
+        const data = new Uint8Array(analyser.fftSize);
+        let raf = 0;
+        const tick = () => {
+          analyser.getByteTimeDomainData(data);
+          let sum = 0;
+          for (const b of data) sum += ((b - 128) / 128) ** 2;
+          levelRef.current = levelRef.current * 0.5 + Math.min(Math.sqrt(sum / data.length) * 5, 1) * 0.5;
+          raf = requestAnimationFrame(tick);
+        };
+        src.onended = () => {
+          cancelAnimationFrame(raf);
+          levelRef.current = 0;
+          setSpeaking(false);
+        };
+        playRef.current = {
+          stop: () => {
+            src.onended = null;
+            cancelAnimationFrame(raf);
+            try {
+              src.stop();
+            } catch {}
+          },
+        };
+        setSpeaking(true);
+        src.start();
+        tick();
+      } catch {
+        if (id === runId.current) speakWithBrowser(text);
+      }
+    },
+    [audioCtx, getToken, speakWithBrowser, stopPlayback],
+  );
+
   useEffect(
     () => () => {
+      runId.current++;
       window.clearInterval(timer.current);
-      recRef.current?.stop();
+      recRef.current?.cancel();
+      playRef.current?.stop();
       window.speechSynthesis?.cancel();
+      void ctxRef.current?.close();
     },
     [],
   );
 
-  return { supported, listening, speaking, transcript, seconds, start, stop, speak };
+  const mode: SpeechMode = listening ? "listening" : processing ? "thinking" : speaking ? "speaking" : "idle";
+
+  return { supported, listening, processing, speaking, mode, transcript, seconds, error, levelRef, start, stop, speak, stopPlayback };
 }
