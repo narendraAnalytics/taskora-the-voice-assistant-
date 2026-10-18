@@ -47,7 +47,7 @@ export function OrganizerView({ name, invites }: { name: string; invites: Invite
     <Shell name={name} role="organizer" title="Organizer dashboard" subtitle="Here is your intern batch today." action={<InviteDialog initial={invites} />}>
       <div className="grid gap-5 lg:grid-cols-12">
         <PaperCard i={0} tilt={-1.5} className="lg:col-span-7">
-          <Jarvis interns={interns} onReassign={reassign} />
+          <Jarvis name={name} interns={interns} onReassign={reassign} />
         </PaperCard>
 
         <StatCards interns={interns} />

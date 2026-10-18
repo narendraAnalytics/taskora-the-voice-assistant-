@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, Send, Square, Volume2 } from "lucide-react";
+import { Maximize2, Mic, Send, Square, Volume2 } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Tape } from "@/components/dashboard/motion";
 import { TalkingFace } from "@/components/dashboard/talking-face";
+import { CallScreen } from "@/components/dashboard/call-screen";
 import { useSpeech } from "@/lib/use-speech";
 import { respond, SUGGESTIONS, type Reply } from "@/lib/jarvis";
 import type { Intern } from "@/lib/demo-data";
@@ -14,22 +15,43 @@ type Msg = { from: "you" | "taskora"; text: string };
 type Pending = Extract<Reply, { kind: "clarify" }>;
 type Confirm = Extract<Reply, { kind: "confirm" }>;
 
+// After an answer Taskora keeps the conversation going; "no thanks" ends it politely.
+const FOLLOW_UPS = [
+  "Anything else you'd like to know?",
+  "Would you like to know anything more?",
+  "Want me to check on anyone else?",
+];
+const CLOSING =
+  /^s*(no|nope|nah|nothing|nothing else|that'?s all|that is all|no,? thank(s| you)( so much)?|thank(s| you)( so much| very much)?|bye|goodbye|i'?m (good|done|fine)|all good|okay,? thank(s| you))W*$/i;
+
 /** The Jarvis panel: hold a conversation about the batch by voice (or type). */
-export function Jarvis({ interns, onReassign }: { interns: Intern[]; onReassign: (fromId: string, toId: string) => void }) {
-  const [log, setLog] = useState<Msg[]>([
-    { from: "taskora", text: "I'm listening. Ask me who's behind, how someone is doing, or to reassign a task." },
-  ]);
+export function Jarvis({
+  name,
+  interns,
+  onReassign,
+}: {
+  name: string;
+  interns: Intern[];
+  onReassign: (fromId: string, toId: string) => void;
+}) {
+  const welcome = `Welcome, ${name}! I'm Taskora, and I'll guide you through your batch. Ask me who's behind, how someone is doing, or to move a task, and I'll take care of the rest.`;
+  const [log, setLog] = useState<Msg[]>([{ from: "taskora", text: welcome }]);
+  const greeted = useRef(false);
+  const followUp = useRef(0);
+  const confirmRef = useRef<Confirm | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [draft, setDraft] = useState("");
   const [muted, setMuted] = useState(false);
+  const [full, setFull] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const internsRef = useRef(interns);
   const mutedRef = useRef(muted);
   useEffect(() => {
+    confirmRef.current = confirm;
     internsRef.current = interns;
     mutedRef.current = muted;
-  }, [interns, muted]);
+  }, [interns, muted, confirm]);
 
   const internNames = interns.flatMap((i) => [i.name, i.name.split(" ")[0]]);
   const speechRef = useRef<{ speak: (t: string) => void }>({ speak: () => {} });
@@ -42,11 +64,21 @@ export function Jarvis({ interns, onReassign }: { interns: Intern[]; onReassign:
   const handle = useCallback(
     (text: string) => {
       setLog((l) => [...l, { from: "you", text }]);
+      const hadConfirm = confirmRef.current !== null;
       setConfirm(null);
+      if (!pending && CLOSING.test(text)) {
+        say(
+          hadConfirm
+            ? "Okay, nothing changed. I'm here whenever you need me, just tap me and ask."
+            : "No problem! I'm here whenever you need me, just tap me and ask.",
+        );
+        return;
+      }
       const r = respond(internsRef.current, text, pending ?? undefined);
       setPending(r.kind === "clarify" ? r : null);
       if (r.kind === "confirm") setConfirm(r);
-      say(r.text);
+      const next = FOLLOW_UPS[followUp.current++ % FOLLOW_UPS.length];
+      say(r.kind === "answer" ? `${r.text} ${next}` : r.text);
     },
     [pending, say],
   );
@@ -64,6 +96,30 @@ export function Jarvis({ interns, onReassign }: { interns: Intern[]; onReassign:
 
   const from = confirm && interns.find((i) => i.id === confirm.fromId);
   const to = confirm && interns.find((i) => i.id === confirm.toId);
+  // The first time full view opens, Taskora greets you out loud. The click is the user gesture that
+  // lets the browser play audio; later opens stay quiet.
+  const openFull = () => {
+    setFull(true);
+    if (!greeted.current) {
+      greeted.current = true;
+      if (!mutedRef.current) speak(welcome);
+    }
+  };
+  const toggleMute = () => {
+    setMuted((m) => !m);
+    stopPlayback();
+  };
+  const toggleMic = () => void (listening ? stop() : start());
+  const confirmYes = () => {
+    if (!confirm || !from || !to) return;
+    onReassign(confirm.fromId, confirm.toId);
+    setConfirm(null);
+    say(`Done. ${from.task} now belongs to ${to.name}.`);
+  };
+  const confirmNo = () => {
+    setConfirm(null);
+    say("Okay, nothing changed.");
+  };
 
   return (
     <section
@@ -92,12 +148,18 @@ export function Jarvis({ interns, onReassign }: { interns: Intern[]; onReassign:
             </p>
           </div>
         </div>
+        <div className="flex shrink-0 items-center gap-2">
         <button
           type="button"
-          onClick={() => {
-            setMuted((m) => !m);
-            stopPlayback();
-          }}
+          onClick={openFull}
+          aria-label="Open full screen"
+          className="grid size-10 place-items-center rounded-full bg-neem-soft text-paper transition-colors hover:bg-haldi hover:text-neem"
+        >
+          <Maximize2 className="size-5" aria-hidden />
+        </button>
+        <button
+          type="button"
+          onClick={toggleMute}
           aria-pressed={muted}
           aria-label={muted ? "Turn spoken replies on" : "Mute spoken replies"}
           className={cn(
@@ -107,6 +169,7 @@ export function Jarvis({ interns, onReassign }: { interns: Intern[]; onReassign:
         >
           <Volume2 className="size-5" aria-hidden />
         </button>
+        </div>
       </div>
 
       <div
@@ -225,6 +288,27 @@ export function Jarvis({ interns, onReassign }: { interns: Intern[]; onReassign:
           </button>
         </div>
       </form>
+      {full && (
+        <CallScreen
+          mode={mode}
+          levelRef={levelRef}
+          supported={supported}
+          listening={listening}
+          seconds={seconds}
+          transcript={transcript}
+          error={error}
+          log={log}
+          confirm={confirm && from && to ? { task: from.task, fromName: from.name, toName: to.name } : null}
+          suggestions={SUGGESTIONS}
+          muted={muted}
+          onToggleMute={toggleMute}
+          onMic={toggleMic}
+          onSend={handle}
+          onConfirm={confirmYes}
+          onCancel={confirmNo}
+          onClose={() => setFull(false)}
+        />
+      )}
       {listening && (
         <div aria-hidden className="relative mt-3 flex h-6 items-end justify-center gap-1">
           {Array.from({ length: 24 }).map((_, i) => (

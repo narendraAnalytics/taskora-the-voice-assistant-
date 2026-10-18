@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useId, useRef, type RefObject } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import type { SpeechMode } from "@/lib/use-speech";
@@ -40,6 +40,9 @@ export function TalkingFace({
   className?: string;
 }) {
   const reduce = useReducedMotion();
+  const uid = useId().replace(/:/g, ""); // clip ids must be unique when two faces are on screen
+  const circleId = `${uid}-circle`;
+  const mouthId = `${uid}-mouth`;
   const modeRef = useRef(mode);
   const head = useRef<SVGGElement>(null);
   const mouth = useRef<SVGPathElement>(null);
@@ -158,15 +161,15 @@ export function TalkingFace({
         ))}
       <svg viewBox="0 0 240 280" className="relative size-full overflow-visible" aria-hidden>
         <defs>
-          <clipPath id="face-circle">
+          <clipPath id={circleId}>
             <circle cx="120" cy="140" r="112" />
           </clipPath>
-          <clipPath id="mouth-clip">
+          <clipPath id={mouthId}>
             <path ref={clip} d={mouthPath(0, 0.3, 0.7)} />
           </clipPath>
         </defs>
         <circle cx="120" cy="140" r="112" fill="#7dbe8f" opacity="0.35" />
-        <g clipPath="url(#face-circle)">
+        <g clipPath={`url(#${circleId})`}>
           {/* shoulders: haldi kurta with a saffron collar */}
           <path d="M-10 300V262C-10 238 40 226 78 222L120 244L162 222C200 226 250 238 250 262V300Z" fill="#f2b33d" />
           <path d="M78 222L120 260L162 222L120 244Z" fill="#e8622a" />
@@ -211,7 +214,7 @@ export function TalkingFace({
             <path d="M120 142Q112 170 108 176Q120 184 132 176Q128 170 120 142Z" fill={SKIN_SHADE} opacity="0.55" />
             {/* mouth */}
             <path ref={mouth} d={mouthPath(0, 0.3, 0.7)} fill="#b23a48" stroke="#b23a48" strokeWidth="3" strokeLinejoin="round" />
-            <g clipPath="url(#mouth-clip)">
+            <g clipPath={`url(#${mouthId})`}>
               <rect ref={teeth} x="90" y={CY - 1} width="60" height="0" fill="#fce7b2" />
               <ellipse ref={tongue} cx="120" cy={CY + 6} rx="15" ry="9" fill="#b23a48" opacity="0" />
             </g>
