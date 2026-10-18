@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { Headphones, Mic, Minimize2, Send, Square, Volume2 } from "lucide-react";
+import { Eraser, Headphones, Mic, Minimize2, Send, Square, Volume2 } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Tape } from "@/components/dashboard/motion";
@@ -18,6 +18,22 @@ export const STATUS: Record<SpeechMode, string> = {
   thinking: "Thinking",
   speaking: "Speaking",
 };
+
+/** "Chat cleared · Undo", shown for a few seconds after clearing. */
+export function UndoPill({ onUndo, className }: { onUndo: () => void; className?: string }) {
+  return (
+    <p role="status" className={cn("font-note mx-auto flex w-fit items-center gap-3 rounded-full bg-neem-soft px-4 py-1.5 text-sm text-sage", className)}>
+      Chat cleared
+      <button
+        type="button"
+        onClick={onUndo}
+        className="rounded-full bg-haldi px-3 py-0.5 font-sans text-sm font-bold text-neem transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-saffron"
+      >
+        Undo
+      </button>
+    </p>
+  );
+}
 
 /** Three bouncing dots: Taskora is working on a reply. */
 export function ThinkingDots({ className }: { className?: string }) {
@@ -190,6 +206,10 @@ export function CallScreen(props: {
   muted: boolean;
   handsFree: boolean;
   onToggleHandsFree: () => void;
+  canClear: boolean;
+  undoable: boolean;
+  onClear: () => void;
+  onUndo: () => void;
   onToggleMute: () => void;
   onMic: () => void;
   onSend: (text: string) => void;
@@ -197,7 +217,7 @@ export function CallScreen(props: {
   onCancel: () => void;
   onClose: () => void;
 }) {
-  const { mode, mood, ended, levelRef, supported, listening, seconds, transcript, error, notice, log, confirm, suggestions, muted, handsFree } = props;
+  const { mode, mood, ended, levelRef, supported, listening, seconds, transcript, error, notice, log, confirm, suggestions, muted, handsFree, canClear, undoable } = props;
   const reduce = useReducedMotion();
   const [draft, setDraft] = useState("");
   const closeBtn = useRef<HTMLButtonElement>(null);
@@ -221,6 +241,7 @@ export function CallScreen(props: {
   }, [log, confirm]);
 
   const lastReply = [...log].reverse().find((m) => m.from === "taskora")?.text ?? "";
+  const [replyHead, ...replyRest] = lastReply.split("\n");
   const lastYou = [...log].reverse().find((m) => m.from === "you")?.text ?? "";
   const youCaption = listening ? transcript || "Go ahead, I'm listening…" : lastYou;
 
@@ -236,7 +257,7 @@ export function CallScreen(props: {
       <Backdrop mode={mode} />
 
       {/* top bar */}
-      <header className="relative flex items-center justify-between gap-3 px-4 pt-4 sm:px-8 sm:pt-6">
+      <header className="relative flex flex-wrap items-center justify-between gap-3 px-4 pt-4 sm:px-8 sm:pt-6">
         <div className="flex items-center gap-3">
           <h2 className="font-hand text-3xl font-bold leading-none text-haldi sm:text-4xl">Taskora</h2>
           <span
@@ -255,6 +276,16 @@ export function CallScreen(props: {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {canClear && (
+            <button
+              type="button"
+              onClick={props.onClear}
+              aria-label="Clear chat"
+              className="grid size-11 place-items-center rounded-full bg-neem-soft transition-colors hover:bg-haldi hover:text-neem focus-visible:outline-2 focus-visible:outline-saffron"
+            >
+              <Eraser className="size-5" aria-hidden />
+            </button>
+          )}
           <button
             type="button"
             onClick={props.onToggleHandsFree}
@@ -316,11 +347,29 @@ export function CallScreen(props: {
             {mode === "thinking" ? (
               <ThinkingDots className="py-3" />
             ) : (
-              <p className="font-hand text-2xl font-bold leading-snug text-paper sm:text-3xl">
-                <span className="sr-only">Taskora: </span>
-                <RevealText text={lastReply} />
-              </p>
+              <>
+                <p className="font-hand text-2xl font-bold leading-snug text-paper sm:text-3xl">
+                  <span className="sr-only">Taskora: </span>
+                  <RevealText text={replyHead} />
+                </p>
+                {/* multi-line replies (a team briefing): one line per person, smaller and scrollable */}
+                {replyRest.length > 0 && (
+                  <ul className="mx-auto max-h-48 max-w-xl space-y-1.5 overflow-y-auto rounded-2xl bg-neem-soft/60 px-4 py-3 text-left font-note text-base leading-snug text-paper">
+                    {replyRest.map((line, i) => (
+                      <motion.li
+                        key={`${lastReply.length}-${i}`}
+                        initial={reduce ? false : { opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.3 + i * 0.12 }}
+                      >
+                        {line}
+                      </motion.li>
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
+            {undoable && <UndoPill onUndo={props.onUndo} className="lg:hidden" />}
             {ended && mode === "idle" && (
               <motion.p
                 initial={reduce ? false : { opacity: 0, y: 6 }}
@@ -378,13 +427,14 @@ export function CallScreen(props: {
               <p
                 key={i}
                 className={cn(
-                  "max-w-[90%] rounded-2xl px-4 py-2.5 text-[0.98rem] leading-snug",
+                  "max-w-[90%] whitespace-pre-line rounded-2xl px-4 py-2.5 text-[0.98rem] leading-snug",
                   m.from === "you" ? "ml-auto rounded-br-md bg-haldi text-neem" : "rounded-bl-md bg-neem text-paper",
                 )}
               >
                 {m.text}
               </p>
             ))}
+            {undoable && <UndoPill onUndo={props.onUndo} />}
           </div>
         </aside>
       </div>

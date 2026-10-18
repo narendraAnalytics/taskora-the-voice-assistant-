@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Maximize2, Mic, Send, Square, Volume2 } from "lucide-react";
+import { Eraser, Maximize2, Mic, Send, Square, Volume2 } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Tape } from "@/components/dashboard/motion";
 import { TalkingFace, type FaceMood } from "@/components/dashboard/talking-face";
-import { CallScreen, STATUS, ThinkingDots } from "@/components/dashboard/call-screen";
+import { CallScreen, STATUS, ThinkingDots, UndoPill } from "@/components/dashboard/call-screen";
 import { useSpeech } from "@/lib/use-speech";
 import { closingKind, goodbye, greeting, isNo, isRepeat, isWait, isYes, respond, SUGGESTIONS, type Ctx, type Reply } from "@/lib/jarvis";
 import type { Intern } from "@/lib/demo-data";
@@ -20,6 +20,7 @@ type After = "question" | "listen" | "none";
 // Generic follow-ups, used on every other answer that has no specific next step to offer.
 const FOLLOW_UPS = ["Anything else you'd like to know?", "What else can I check for you?", "Anything else?"];
 const NO_PROBLEM = "No problem. What else can I help with?";
+const FRESH = "Fresh start! Ask me who's behind, how someone is doing, or to move a task.";
 const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
 
 /**
@@ -179,7 +180,8 @@ export function Jarvis({
       setChips([...new Set(r.chips ?? SUGGESTIONS)]);
       const n = followUp.current++;
       const follow = r.offer?.ask ?? (n % 2 === 0 ? FOLLOW_UPS[(n / 2) % FOLLOW_UPS.length] : null);
-      void reply(follow ? `${r.text} ${follow}` : r.text, [r.speak ?? r.text, ...(follow ? [follow] : [])], follow ? "question" : "listen");
+      const shown = follow ? `${r.text}${r.text.includes("\n") ? "\n" : " "}${follow}` : r.text;
+      void reply(shown, [...[r.speak ?? r.text].flat(), ...(follow ? [follow] : [])], follow ? "question" : "listen");
     },
     [confirmNo, confirmYes, reply],
   );
@@ -217,7 +219,7 @@ export function Jarvis({
     if (greeted.current) return;
     greeted.current = true;
     // Time of day comes from the viewer's clock, so it is only worked out here (not during SSR).
-    const hello = greeting(name);
+    const hello = greeting(name, internsRef.current);
     setLog((l) => (l.length === 1 && l[0].text === welcome ? [{ from: "taskora", text: hello }] : [...l, { from: "taskora", text: hello }]));
     last.current = { shown: hello, spoken: [hello] };
     setMood("happy");
@@ -246,6 +248,40 @@ export function Jarvis({
     setNapping(false);
     void (listening ? stop() : start());
   };
+  /** Clear the chat and what Taskora remembers about it; Undo brings the messages back for a few seconds. */
+  const cleared = useRef<{ log: Msg[]; chips: string[] } | null>(null);
+  const [undoable, setUndoable] = useState(false);
+  useEffect(() => {
+    if (!undoable) return;
+    const t = window.setTimeout(() => setUndoable(false), 6000);
+    return () => window.clearTimeout(t);
+  }, [undoable]);
+  const clearChat = () => {
+    stopPlayback();
+    if (listening) cancel();
+    cleared.current = { log, chips };
+    setLog([{ from: "taskora", text: FRESH }]);
+    setChips(SUGGESTIONS);
+    setConfirmBoth(null);
+    pendingRef.current = null;
+    convo.current = {};
+    last.current = null;
+    holdRef.current = false;
+    endedRef.current = false;
+    setEnded(false);
+    setNapping(false);
+    setMood("neutral");
+    setUndoable(true);
+  };
+  const undoClear = () => {
+    if (cleared.current) {
+      setLog(cleared.current.log);
+      setChips(cleared.current.chips);
+    }
+    cleared.current = null;
+    setUndoable(false);
+  };
+  const canClear = log.length > 1 || confirm !== null;
   const toggleHandsFree = () => {
     setHandsFree((h) => !h);
     if (listening && handsFree) cancel();
@@ -291,6 +327,16 @@ export function Jarvis({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {canClear && (
+            <button
+              type="button"
+              onClick={clearChat}
+              aria-label="Clear chat"
+              className="grid size-10 place-items-center rounded-full bg-neem-soft text-paper transition-colors hover:bg-haldi hover:text-neem"
+            >
+              <Eraser className="size-5" aria-hidden />
+            </button>
+          )}
           <button
             type="button"
             onClick={openFull}
@@ -327,13 +373,14 @@ export function Jarvis({
             transition={{ type: "spring", stiffness: 300, damping: 22 }}
             style={{ transformOrigin: m.from === "you" ? "bottom right" : "bottom left" }}
             className={cn(
-              "max-w-[88%] rounded-2xl px-4 py-2.5 text-[0.98rem] leading-snug",
+              "max-w-[88%] whitespace-pre-line rounded-2xl px-4 py-2.5 text-[0.98rem] leading-snug",
               m.from === "you" ? "ml-auto rounded-br-md bg-haldi text-neem" : "rounded-bl-md bg-neem-soft text-paper",
             )}
           >
             {m.text}
           </motion.p>
         ))}
+        {undoable && <UndoPill onUndo={undoClear} />}
         {listening && (
           <p className="ml-auto max-w-[88%] rounded-2xl rounded-br-md bg-haldi/70 px-4 py-2.5 text-neem">
             {transcript || "Listening…"}
@@ -446,6 +493,10 @@ export function Jarvis({
           muted={muted}
           handsFree={handsFree}
           onToggleHandsFree={toggleHandsFree}
+          canClear={canClear}
+          undoable={undoable}
+          onClear={clearChat}
+          onUndo={undoClear}
           onToggleMute={toggleMute}
           onMic={toggleMic}
           onSend={handle}
