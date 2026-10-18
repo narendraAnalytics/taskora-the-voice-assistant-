@@ -71,8 +71,9 @@ export function useSpeech(onFinal?: (text: string) => void, maxSeconds = 20, key
       const text = out.text.trim();
       setTranscript(text);
       if (text) cbRef.current?.(text);
-    } catch {
-      if (id === runId.current) setError("I couldn't hear that. Check the voice service and try again.");
+    } catch (e) {
+      const why = e instanceof Error ? e.message : "network error";
+      if (id === runId.current) setError(`I couldn't hear that (${why}). Try again.`);
     } finally {
       if (id === runId.current) setProcessing(false);
     }

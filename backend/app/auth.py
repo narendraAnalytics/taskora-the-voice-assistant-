@@ -3,9 +3,12 @@ from collections import defaultdict, deque
 from typing import Annotated
 
 import jwt
+import structlog
 from fastapi import Depends, HTTPException, Request
 
 from app.config import Settings, get_settings
+
+log = structlog.get_logger()
 
 _jwks: dict[str, jwt.PyJWKClient] = {}
 
@@ -34,7 +37,8 @@ def current_user(request: Request, settings: Annotated[Settings, Depends(get_set
         raise HTTPException(401, "Missing bearer token")
     try:
         claims = _verify(header[7:], settings)
-    except jwt.PyJWTError:
+    except jwt.PyJWTError as e:
+        log.warning("auth_rejected", reason=type(e).__name__, detail=str(e)[:200])
         raise HTTPException(401, "Invalid token") from None
     return claims["sub"]
 

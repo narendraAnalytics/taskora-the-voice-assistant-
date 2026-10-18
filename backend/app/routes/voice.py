@@ -1,6 +1,7 @@
 import json
 from typing import Annotated
 
+import structlog
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -9,6 +10,7 @@ from app.auth import rate_limit
 from app.config import Settings, get_settings
 from app.sarvam import SarvamClient, SarvamError
 
+log = structlog.get_logger()
 router = APIRouter(prefix="/voice", tags=["voice"])
 
 
@@ -53,6 +55,7 @@ async def speech_to_text(
             keyterms=terms,
         )
     except SarvamError as e:
+        log.warning("sarvam_stt_failed", status=e.status, detail=e.detail)
         raise HTTPException(502, f"Speech service error ({e.status})") from e
 
 
@@ -67,5 +70,6 @@ async def text_to_speech(body: SpeakIn, sarvam: Sarvam, _user: User):
     try:
         audio = await sarvam.synthesize(body.text, body.language_code, body.speaker)
     except SarvamError as e:
+        log.warning("sarvam_tts_failed", status=e.status, detail=e.detail)
         raise HTTPException(502, f"Speech service error ({e.status})") from e
     return Response(content=audio, media_type="audio/wav")
