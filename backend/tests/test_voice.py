@@ -71,5 +71,14 @@ def test_tts(client):
     assert r.status_code == 200 and r.content[:4] == b"RIFF"
 
 
+def test_tts_mp3(client):
+    r = client.post("/voice/tts", json={"text": "Namaste", "codec": "mp3"})
+    assert r.status_code == 200 and r.headers["content-type"] == "audio/mpeg"
+
+
+def test_tts_rejects_bad_codec(client):
+    assert client.post("/voice/tts", json={"text": "x", "codec": "ogg"}).status_code == 422
+
+
 def test_tts_rejects_bad_language(client):
     assert client.post("/voice/tts", json={"text": "x", "language_code": "xx"}).status_code == 422

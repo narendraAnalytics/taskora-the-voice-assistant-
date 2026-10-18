@@ -1,5 +1,5 @@
 import json
-from typing import Annotated
+from typing import Annotated, Literal
 
 import structlog
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -63,13 +63,15 @@ class SpeakIn(BaseModel):
     text: str = Field(min_length=1, max_length=5000)
     language_code: str = Field(default="en-IN", pattern=r"^[a-z]{2}-IN$")
     speaker: str | None = Field(default=None, pattern=r"^[a-z0-9_]{2,60}$")
+    # mp3 is ~3x smaller than wav, so replies reach the browser sooner.
+    codec: Literal["wav", "mp3"] = "wav"
 
 
 @router.post("/tts", response_class=Response)
 async def text_to_speech(body: SpeakIn, sarvam: Sarvam, _user: User):
     try:
-        audio = await sarvam.synthesize(body.text, body.language_code, body.speaker)
+        audio = await sarvam.synthesize(body.text, body.language_code, body.speaker, body.codec)
     except SarvamError as e:
         log.warning("sarvam_tts_failed", status=e.status, detail=e.detail)
         raise HTTPException(502, f"Speech service error ({e.status})") from e
-    return Response(content=audio, media_type="audio/wav")
+    return Response(content=audio, media_type="audio/mpeg" if body.codec == "mp3" else "audio/wav")

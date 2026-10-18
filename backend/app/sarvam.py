@@ -111,9 +111,14 @@ class SarvamClient:
         }
 
     async def synthesize(
-        self, text: str, language_code: str = "en-IN", speaker: str | None = None
+        self,
+        text: str,
+        language_code: str = "en-IN",
+        speaker: str | None = None,
+        codec: str = "wav",
     ) -> bytes:
-        """Returns one WAV blob; long text is chunked and the chunks joined."""
+        """Returns one WAV or MP3 blob; long text is chunked and the chunks joined
+        (MP3 frames concatenate as-is)."""
         audios: list[bytes] = []
         for chunk in split_text(text):
             resp = await self._http.post(
@@ -125,11 +130,13 @@ class SarvamClient:
                     "speaker": speaker or self._s.tts_default_speaker,
                     "model": self._s.tts_model,
                     "speech_sample_rate": self._s.tts_sample_rate,
-                    "output_audio_codec": "wav",
+                    "pace": self._s.tts_pace,
+                    "temperature": self._s.tts_temperature,
+                    "output_audio_codec": codec,
                 },
             )
             if resp.status_code != 200:
                 raise SarvamError(resp.status_code, resp.text[:300])
             for b64 in resp.json().get("audios", []):
                 audios.append(base64.b64decode(b64))
-        return join_wav(audios)
+        return join_wav(audios) if codec == "wav" else b"".join(audios)

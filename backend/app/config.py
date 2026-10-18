@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     tts_model: str = "bulbul:v4-flash"
     tts_default_speaker: str = "simran_en_customer"
     tts_sample_rate: int = 24000
+    # Delivery: a touch quicker than default and a low temperature for a steady, confident voice.
+    tts_pace: float = 1.05
+    tts_temperature: float = 0.45
 
     # Clerk: verify session JWTs. Without CLERK_JWKS_URL, auth is skipped in development only.
     clerk_jwks_url: str | None = None
@@ -27,7 +30,8 @@ class Settings(BaseSettings):
     ]
 
     max_audio_bytes: int = 5 * 1024 * 1024
-    voice_requests_per_minute: int = 30
+    # A spoken turn is one STT call plus one TTS call per reply sentence.
+    voice_requests_per_minute: int = 60
 
 
 @lru_cache
