@@ -23,7 +23,8 @@ export function useSpeech(onFinal?: (text: string) => void, maxSeconds = 20, key
   const levelRef = useRef(0);
   const ctxRef = useRef<AudioContext | null>(null);
   const playRef = useRef<{ stop: () => void } | null>(null);
-  const runId = useRef(0); // lets a newer start()/speak() cancel an older one mid-flight
+  const runId = useRef(0); // lets a newer speak() cancel an older one mid-flight
+  const sttId = useRef(0); // same for transcription (kept apart so speaking a reply does not cancel it)
   const [listening, setListening] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -62,20 +63,20 @@ export function useSpeech(onFinal?: (text: string) => void, maxSeconds = 20, key
     if (!rec) return;
     recRef.current = null;
     setListening(false);
-    const id = ++runId.current;
+    const id = ++sttId.current;
     setProcessing(true);
     try {
       const wav = await rec.finish();
       const out = await transcribe(wav, await getToken(), termsRef.current);
-      if (id !== runId.current) return;
+      if (id !== sttId.current) return;
       const text = out.text.trim();
       setTranscript(text);
       if (text) cbRef.current?.(text);
     } catch (e) {
       const why = e instanceof Error ? e.message : "network error";
-      if (id === runId.current) setError(`I couldn't hear that (${why}). Try again.`);
+      if (id === sttId.current) setError(`I couldn't hear that (${why}). Try again.`);
     } finally {
-      if (id === runId.current) setProcessing(false);
+      if (id === sttId.current) setProcessing(false);
     }
   }, [getToken]);
 
@@ -86,6 +87,8 @@ export function useSpeech(onFinal?: (text: string) => void, maxSeconds = 20, key
 
   const start = useCallback(async () => {
     stopPlayback();
+    sttId.current++; // a new take cancels any transcription still in flight
+    setProcessing(false);
     audioCtx(); // unlock playback while we still have the tap that started this
     setError(null);
     setTranscript("");
@@ -184,6 +187,7 @@ export function useSpeech(onFinal?: (text: string) => void, maxSeconds = 20, key
   useEffect(
     () => () => {
       runId.current++;
+      sttId.current++;
       window.clearInterval(timer.current);
       recRef.current?.cancel();
       playRef.current?.stop();
