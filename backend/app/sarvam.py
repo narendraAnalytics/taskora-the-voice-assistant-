@@ -44,6 +44,18 @@ def split_text(text: str, limit: int = TTS_MAX_CHARS) -> list[str]:
     return chunks
 
 
+def clean_keyterms(terms: list[str]) -> list[str]:
+    """Sarvam rejects duplicates (e.g. 'Ravi' twice) and allows 50 terms of 64 chars."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for t in terms:
+        t = t.strip()[:64]
+        if t and t.lower() not in seen:
+            seen.add(t.lower())
+            out.append(t)
+    return out[:50]
+
+
 def join_wav(parts: list[bytes]) -> bytes:
     """Concatenate WAV files that share one format (we always request the same rate)."""
     if not parts:
@@ -81,8 +93,9 @@ class SarvamClient:
         data: dict[str, str] = {"model": self._s.stt_model, "mode": self._s.stt_mode}
         if language_code:
             data["language_code"] = language_code
-        if keyterms:
-            data["keyterms"] = json.dumps([k[:64] for k in keyterms[:50]])
+        terms = clean_keyterms(keyterms or [])
+        if terms:
+            data["keyterms"] = json.dumps(terms)
         resp = await self._http.post(
             f"{self._s.sarvam_base_url}/speech-to-text",
             headers=self._headers,

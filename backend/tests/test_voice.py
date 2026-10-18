@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings, get_settings
-from app.sarvam import SarvamClient, join_wav, split_text
+from app.sarvam import SarvamClient, clean_keyterms, join_wav, split_text
 
 
 def wav(n=10):
@@ -25,6 +25,11 @@ def test_split_text_respects_limit():
     chunks = split_text(text, 500)
     assert all(len(c) <= 500 for c in chunks)
     assert len(chunks) > 1
+
+
+def test_clean_keyterms_drops_duplicates_and_blanks():
+    assert clean_keyterms(["Ravi", " ravi ", "", "Ravi K", "Ravi"]) == ["Ravi", "Ravi K"]
+    assert len(clean_keyterms([f"n{i}" for i in range(80)])) == 50
 
 
 def test_join_wav_concats_frames():
