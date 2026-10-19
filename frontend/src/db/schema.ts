@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { date, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 /** One row per Clerk user. `id` is the Clerk user id. */
 export const users = pgTable("users", {
@@ -28,6 +29,15 @@ export const internInvites = pgTable("intern_invites", {
   email: text("email").notNull(),
   name: text("name"),
   phone: text("phone"),
+  position: text("position"),
+  college: text("college"),
+  degree: text("degree"),
+  studyYear: text("study_year"),
+  durationMonths: integer("duration_months"),
+  /** YYYY-MM-DD */
+  startDate: date("start_date"),
+  skills: text("skills").array().notNull().default(sql`'{}'`),
+  language: text("language"),
   clerkInvitationId: text("clerk_invitation_id"),
   status: text("status").$type<"invited" | "joined" | "revoked">().notNull().default("invited"),
   userId: text("user_id").references(() => users.id, { onDelete: "set null" }),

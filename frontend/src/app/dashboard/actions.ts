@@ -6,6 +6,7 @@ import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { internInvites } from "@/db/schema";
+import { LANGUAGES, MAX_SKILLS, STUDY_YEARS } from "@/lib/intern-options";
 import { requireOrganizer } from "@/lib/session";
 
 export type Invite = {
@@ -13,6 +14,14 @@ export type Invite = {
   name: string | null;
   email: string;
   phone: string | null;
+  position: string | null;
+  college: string | null;
+  degree: string | null;
+  studyYear: string | null;
+  durationMonths: number | null;
+  startDate: string | null;
+  skills: string[];
+  language: string | null;
   status: "invited" | "joined" | "revoked";
   invitedAt: string;
 };
@@ -53,7 +62,24 @@ const inviteSchema =z.object({
       if (!p) ctx.addIssue({ code: "custom", message: "Enter a valid phone number, e.g. 98765 43210." });
       return p ?? "";
     }),
+  position: z.string().trim().min(2, "Pick or type a position.").max(40),
+  college: z.string().trim().min(2, "Enter the college or institute.").max(120),
+  degree: z.string().trim().max(60).optional().transform((v) => v || null),
+  studyYear: z.enum(STUDY_YEARS).nullish().transform((v) => v ?? null),
+  durationMonths: z.number().int().min(1).max(24).nullish().transform((v) => v ?? null),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid start date.")
+    .nullish()
+    .transform((v) => v || null),
+  skills: z
+    .array(z.string().trim().min(1).max(30))
+    .max(MAX_SKILLS, `Add at most ${MAX_SKILLS} skills.`)
+    .default([]),
+  language: z.enum(LANGUAGES).nullish().transform((v) => v ?? null),
 });
+
+export type InviteInput = z.input<typeof inviteSchema>;
 
 async function listFor(organizerId: string): Promise<Invite[]> {
   const rows = await db
@@ -68,6 +94,14 @@ async function listFor(organizerId: string): Promise<Invite[]> {
       name: r.name,
       email: r.email,
       phone: r.phone,
+      position: r.position,
+      college: r.college,
+      degree: r.degree,
+      studyYear: r.studyYear,
+      durationMonths: r.durationMonths,
+      startDate: r.startDate,
+      skills: r.skills,
+      language: r.language,
       status: r.status,
       invitedAt: r.invitedAt.toISOString(),
     }));
@@ -78,11 +112,11 @@ export async function getInvites(): Promise<Invite[]> {
   return listFor(s.userId);
 }
 
-export async function inviteIntern(input: { name: string; email: string; phone: string }): Promise<InviteResult> {
+export async function inviteIntern(input: InviteInput): Promise<InviteResult> {
   const s = await requireOrganizer();
   const parsed = inviteSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the details." };
-  const { name, email, phone } = parsed.data;
+  const { name, email, phone, ...profile } = parsed.data;
 
   const existing = (await db.select().from(internInvites).where(eq(internInvites.organizerId, s.userId))).find(
     (r) => r.email.toLowerCase() === email,
@@ -110,10 +144,12 @@ export async function inviteIntern(input: { name: string; email: string; phone: 
   if (existing) {
     await db
       .update(internInvites)
-      .set({ name, phone, clerkInvitationId: invitationId, status: "invited", invitedAt: new Date() })
+      .set({ name, phone, ...profile, clerkInvitationId: invitationId, status: "invited", invitedAt: new Date() })
       .where(eq(internInvites.id, existing.id));
   } else {
-    await db.insert(internInvites).values({ organizerId: s.userId, email, name, phone, clerkInvitationId: invitationId });
+    await db
+      .insert(internInvites)
+      .values({ organizerId: s.userId, email, name, phone, ...profile, clerkInvitationId: invitationId });
   }
   return { ok: true, invites: await listFor(s.userId) };
 }
