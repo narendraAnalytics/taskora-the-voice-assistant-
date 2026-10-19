@@ -249,7 +249,7 @@ function Alert({ names }: { names: string[] }) {
   );
 }
 
-export function StatCards({ interns }: { interns: Intern[] }) {
+export function StatCards({ interns, invited = 0 }: { interns: Intern[]; invited?: number }) {
   const total = interns.length || 1;
   const done = interns.filter((i) => i.status === "done").length;
   const onTrack = interns.filter((i) => i.status === "progress" || i.status === "done").length;
@@ -260,7 +260,7 @@ export function StatCards({ interns }: { interns: Intern[] }) {
       <PaperCard i={1} tilt={-3}>
         <Tile className="bg-neem text-paper">
           <Faces interns={interns} />
-          <Caption value={interns.length} label="Interns" sub="in this batch" />
+          <Caption value={interns.length} label="Interns" sub={invited > 0 ? `${interns.length - invited} joined · ${invited} invited` : "in this batch"} />
         </Tile>
       </PaperCard>
 

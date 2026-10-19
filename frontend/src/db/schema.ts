@@ -1,3 +1,4 @@
+import { baUser } from "./auth-schema";
 import { sql } from "drizzle-orm";
 import { date, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
@@ -41,6 +42,8 @@ export const internInvites = pgTable("intern_invites", {
   clerkInvitationId: text("clerk_invitation_id"),
   status: text("status").$type<"invited" | "joined" | "completed" | "revoked">().notNull().default("invited"),
   userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  /** Better Auth intern account, created when the invite is sent. */
+  internUserId: text("intern_user_id").references(() => baUser.id, { onDelete: "set null" }),
   invitedAt: timestamp("invited_at", { withTimezone: true }).notNull().defaultNow(),
   joinedAt: timestamp("joined_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),

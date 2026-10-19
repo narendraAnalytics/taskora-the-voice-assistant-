@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { PartyPopper } from "lucide-react";
+import { getInvites } from "@/app/dashboard/actions";
 import { StatCards } from "@/components/dashboard/stat-cards";
 import { STATUS_LABEL, type Intern, type Status } from "@/lib/demo-data";
 import type { Invite } from "@/app/dashboard/actions";
@@ -8,7 +10,7 @@ import { InviteDialog } from "@/components/dashboard/invite-dialog";
 import { Jarvis } from "@/components/dashboard/jarvis";
 import { Avatar, StatusChip } from "@/components/dashboard/status-chip";
 import { Shell } from "@/components/dashboard/shell";
-import { motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { GrowBar, PaperCard, Tape } from "@/components/dashboard/motion";
 import { cn } from "@/lib/utils";
 
@@ -32,7 +34,7 @@ function fromInvites(invites: Invite[]): Intern[] {
         id: i.id,
         name: full,
         aliases: [...new Set([full.toLowerCase(), full.split(" ")[0].toLowerCase()])],
-        task: i.status === "invited" ? "Invite sent, not joined yet" : "No task yet",
+        task: i.status === "invited" ? "Invite sent, not joined yet" : "Joined, no task yet",
         status: "todo" as Status,
         progress: 0,
         due: "—",
@@ -67,18 +69,60 @@ export function OrganizerView({ invites }: { name?: string; invites: Invite[] })
       });
     });
 
+  // Pick up changes made elsewhere (an intern joining) without a reload, and say so.
+  const [joinedNow, setJoinedNow] = useState<string[]>([]);
+  const known = useRef(new Map(invites.map((i) => [i.id, i.status])));
+  useEffect(() => {
+    const check = async () => {
+      if (document.visibilityState !== "visible") return;
+      const next = await getInvites().catch(() => null);
+      if (!next) return;
+      const arrived = next.filter((i) => i.status === "joined" && known.current.get(i.id) === "invited").map((i) => i.name ?? i.email);
+      known.current = new Map(next.map((i) => [i.id, i.status]));
+      setList((cur) => (JSON.stringify(cur) === JSON.stringify(next) ? cur : next));
+      if (arrived.length) setJoinedNow(arrived);
+    };
+    const t = window.setInterval(check, 15_000);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      window.clearInterval(t);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, []);
+  useEffect(() => {
+    if (!joinedNow.length) return;
+    const t = window.setTimeout(() => setJoinedNow([]), 8000);
+    return () => window.clearTimeout(t);
+  }, [joinedNow]);
+
   const count = (s: Status) => interns.filter((i) => i.status === s).length;
 
   const feed = interns.filter((i) => i.update).sort((a, b) => (a.updatedAt === "Just now" ? -1 : b.updatedAt === "Just now" ? 1 : 0));
 
   return (
-    <Shell name="Team" role="organizer" title="Organizer dashboard" subtitle="Here is your intern batch today." action={<InviteDialog initial={invites} onChange={setList} />}>
+    <Shell name="Team" role="organizer" title="Organizer dashboard" subtitle="Here is your intern batch today." action={<InviteDialog invites={list} onChange={setList} />}>
+      <AnimatePresence>
+        {joinedNow.length > 0 && (
+          <motion.div
+            role="status"
+            initial={reduce ? false : { opacity: 0, y: -14, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="mb-5 flex items-center gap-3 rounded-2xl bg-tulsi px-5 py-3.5 font-semibold text-neem ring-2 ring-neem/25 shadow-[0_4px_0_rgba(23,63,48,0.2)]"
+          >
+            <PartyPopper className="size-6 shrink-0" aria-hidden />
+            <p className="font-note text-lg">
+              {joinedNow.length === 1 ? joinedNow[0] : joinedNow.slice(0, -1).join(", ") + " and " + joinedNow.at(-1)} just joined your batch!
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="grid gap-5 lg:grid-cols-12">
         <PaperCard i={0} tilt={-1.5} className="lg:col-span-7">
           <Jarvis name="Team" interns={interns} onReassign={reassign} />
         </PaperCard>
 
-        <StatCards interns={interns} />
+        <StatCards interns={interns} invited={list.filter((i) => i.status === "invited").length} />
 
         <PaperCard as="section" i={5} tilt={1.5} className={cn(card, "lg:col-span-7")}>
           <div className="flex items-baseline justify-between">

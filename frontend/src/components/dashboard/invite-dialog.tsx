@@ -386,19 +386,15 @@ function Stepper({ step }: { step: number }) {
  * Organizer-only "Add interns" button + form. Interns get an emailed link to set their own
  * password, so nothing secret is shared. Invited interns are listed under the form.
  */
-export function InviteDialog({ initial, onChange }: { initial: Invite[]; onChange?: (invites: Invite[]) => void }) {
+export function InviteDialog({ invites, onChange }: { invites: Invite[]; onChange: (invites: Invite[]) => void }) {
   const [open, setOpen] = useState(false);
-  const [invites, setInvites] = useState(initial);
   const [view, setView] = useState<"active" | "completed">("active");
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [listError, setListError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saved, setSaved] = useState("");
   const topRef = useRef<HTMLDivElement>(null);
-  const update = (next: Invite[]) => {
-    setInvites(next);
-    onChange?.(next);
-  };
+  const update = onChange;
   const [form, setForm] = useState<Form>(emptyForm);
   const [step, setStep] = useState(0);
   const [otherPosition, setOtherPosition] = useState(false);

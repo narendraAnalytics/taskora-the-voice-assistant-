@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { LogOut } from "lucide-react";
+import { authClient } from "@/lib/auth-client";
 import { motion, useReducedMotion } from "framer-motion";
 import { Logo } from "@/components/landing/logo";
 import { Scribble } from "@/components/dashboard/motion";
@@ -27,6 +30,7 @@ export function Shell({
   children: React.ReactNode;
 }) {
   const reduce = useReducedMotion();
+  const router = useRouter();
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
     setNow(new Date());
@@ -63,6 +67,20 @@ export function Shell({
               </span>
             )}
             <span className="rounded-full bg-neem px-3 py-1 text-sm font-semibold capitalize text-paper">{role}</span>
+            {role === "intern" && (
+              <button
+                type="button"
+                onClick={async () => {
+                  await authClient.signOut();
+                  router.push("/");
+                  router.refresh();
+                }}
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold ring-1 ring-neem/30 hover:bg-haldi/60 focus-visible:outline-2 focus-visible:outline-saffron"
+              >
+                <LogOut className="size-4" aria-hidden />
+                Sign out
+              </button>
+            )}
           </div>
         </header>
 
