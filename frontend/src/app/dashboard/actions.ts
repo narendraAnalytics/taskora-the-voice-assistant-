@@ -5,7 +5,7 @@ import { clerkClient } from "@clerk/nextjs/server";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { internInvites } from "@/db/schema";
+import { internInvites, users } from "@/db/schema";
 import { sendInviteEmail } from "@/lib/email";
 import { LANGUAGES, MAX_SKILLS, STUDY_YEARS } from "@/lib/intern-options";
 import { requireOrganizer } from "@/lib/session";
@@ -23,7 +23,7 @@ export type Invite = {
   startDate: string | null;
   skills: string[];
   language: string | null;
-  status: "invited" | "joined" | "revoked";
+  status: "invited" | "joined" | "completed" | "revoked";
   invitedAt: string;
 };
 export type InviteResult = { ok: true; invites: Invite[] } | { ok: false; error: string };
@@ -195,5 +195,80 @@ export async function revokeInvite(id: string): Promise<InviteResult> {
     }
   }
   await db.update(internInvites).set({ status: "revoked" }).where(eq(internInvites.id, row.id));
+  return { ok: true, invites: await listFor(s.userId) };
+}
+
+/** The organizer's own invite row, or an error message. */
+async function ownedInvite(organizerId: string, id: string) {
+  const uuid = z.uuid().safeParse(id);
+  if (!uuid.success) return null;
+  const [row] = await db.select().from(internInvites).where(eq(internInvites.id, uuid.data)).limit(1);
+  return row && row.organizerId === organizerId ? row : null;
+}
+
+/** Never ban or delete an account that is not a plain intern (e.g. an organizer who invited their own email). */
+async function isIntern(userId: string) {
+  const [u] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
+  return u?.role === "intern";
+}
+
+const clerkMessage = (e: unknown, fallback: string) => {
+  const m = (e as { errors?: { longMessage?: string; message: string }[] }).errors?.[0];
+  return m?.longMessage ?? m?.message ?? fallback;
+};
+
+/**
+ * Internship finished: the intern leaves the active board and their Clerk account is banned, so they can
+ * no longer sign in and existing sessions stop working. The record stays for history; `reopenIntern` undoes it.
+ */
+export async function completeIntern(id: string): Promise<InviteResult> {
+  const s = await requireOrganizer();
+  const row = await ownedInvite(s.userId, id);
+  if (!row) return { ok: false, error: "Unknown intern." };
+  if (row.status !== "joined" || !row.userId) return { ok: false, error: "Only interns who have joined can be marked completed." };
+  if (!(await isIntern(row.userId))) return { ok: false, error: "That account is not an intern." };
+
+  try {
+    await (await clerkClient()).users.banUser(row.userId);
+  } catch (e) {
+    return { ok: false, error: clerkMessage(e, "Could not end their access. Try again.") };
+  }
+  await db.update(internInvites).set({ status: "completed", completedAt: new Date() }).where(eq(internInvites.id, row.id));
+  return { ok: true, invites: await listFor(s.userId) };
+}
+
+/** Undo "completed": lifts the ban and puts the intern back on the active board. */
+export async function reopenIntern(id: string): Promise<InviteResult> {
+  const s = await requireOrganizer();
+  const row = await ownedInvite(s.userId, id);
+  if (!row) return { ok: false, error: "Unknown intern." };
+  if (row.status !== "completed" || !row.userId) return { ok: false, error: "This internship is not marked completed." };
+
+  try {
+    await (await clerkClient()).users.unbanUser(row.userId);
+  } catch (e) {
+    return { ok: false, error: clerkMessage(e, "Could not restore their access. Try again.") };
+  }
+  await db.update(internInvites).set({ status: "joined", completedAt: null }).where(eq(internInvites.id, row.id));
+  return { ok: true, invites: await listFor(s.userId) };
+}
+
+/** Permanent removal (left early / added by mistake): deletes the Clerk account and the invite row. */
+export async function removeIntern(id: string): Promise<InviteResult> {
+  const s = await requireOrganizer();
+  const row = await ownedInvite(s.userId, id);
+  if (!row) return { ok: false, error: "Unknown intern." };
+  if (row.status === "invited") return { ok: false, error: "Revoke pending invites instead." };
+
+  if (row.userId) {
+    if (!(await isIntern(row.userId))) return { ok: false, error: "That account is not an intern." };
+    try {
+      await (await clerkClient()).users.deleteUser(row.userId);
+    } catch (e) {
+      const status = (e as { status?: number }).status;
+      if (status !== 404) return { ok: false, error: clerkMessage(e, "Could not delete their account. Try again.") };
+    }
+  }
+  await db.delete(internInvites).where(eq(internInvites.id, row.id));
   return { ok: true, invites: await listFor(s.userId) };
 }

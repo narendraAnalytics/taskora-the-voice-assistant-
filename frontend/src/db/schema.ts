@@ -39,10 +39,11 @@ export const internInvites = pgTable("intern_invites", {
   skills: text("skills").array().notNull().default(sql`'{}'`),
   language: text("language"),
   clerkInvitationId: text("clerk_invitation_id"),
-  status: text("status").$type<"invited" | "joined" | "revoked">().notNull().default("invited"),
+  status: text("status").$type<"invited" | "joined" | "completed" | "revoked">().notNull().default("invited"),
   userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
   invitedAt: timestamp("invited_at", { withTimezone: true }).notNull().defaultNow(),
   joinedAt: timestamp("joined_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
 });
 
 export type InviteRow = typeof internInvites.$inferSelect;

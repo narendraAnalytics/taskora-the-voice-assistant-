@@ -21,8 +21,17 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { inviteIntern, revokeInvite, type Invite } from "@/app/dashboard/actions";
+import {
+  completeIntern,
+  inviteIntern,
+  removeIntern,
+  reopenIntern,
+  revokeInvite,
+  type Invite,
+  type InviteResult,
+} from "@/app/dashboard/actions";
 import { Avatar } from "@/components/dashboard/status-chip";
+import { InternList, type Confirm } from "@/components/dashboard/intern-list";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DURATIONS, LANGUAGES, MAX_SKILLS, POSITIONS, STUDY_YEARS } from "@/lib/intern-options";
 import { cn } from "@/lib/utils";
@@ -264,6 +273,92 @@ function Badge({ f }: { f: Form }) {
   );
 }
 
+const PETALS = ["bg-haldi", "bg-saffron", "bg-tulsi", "bg-kumkum", "bg-haldi", "bg-tulsi", "bg-saffron", "bg-kumkum", "bg-haldi", "bg-tulsi", "bg-saffron", "bg-kumkum"];
+
+/** Shown after a successful save: a check mark draws itself inside a burst of petals. */
+function Sent({ who, onAnother, onDone }: { who: { name: string; email: string; position: string }; onAnother: () => void; onDone: () => void }) {
+  const reduce = useReducedMotion();
+  const first = who.name.split(" ")[0];
+  return (
+    <div role="status" className="flex flex-col items-center px-2 py-8 text-center">
+      <div className="relative grid size-32 place-items-center">
+        {!reduce &&
+          PETALS.map((tone, i) => {
+            const a = (i / PETALS.length) * Math.PI * 2;
+            return (
+              <motion.span
+                key={i}
+                aria-hidden
+                className={cn("absolute size-3 rounded-full", tone, i % 2 && "h-4 w-2 rounded-[40%]")}
+                initial={{ x: 0, y: 0, scale: 0, opacity: 1 }}
+                animate={{ x: Math.cos(a) * 72, y: Math.sin(a) * 72, scale: [0, 1.2, 0.8], opacity: [1, 1, 0], rotate: i * 40 }}
+                transition={{ duration: 1.1, delay: 0.25, ease: "easeOut" }}
+              />
+            );
+          })}
+        <motion.span
+          className="absolute inset-3 rounded-full bg-tulsi ring-4 ring-neem"
+          initial={reduce ? false : { scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: "spring", stiffness: 260, damping: 14 }}
+        />
+        <motion.span
+          aria-hidden
+          className="absolute inset-3 rounded-full ring-2 ring-tulsi"
+          initial={reduce ? false : { scale: 1, opacity: 0.8 }}
+          animate={{ scale: 1.7, opacity: 0 }}
+          transition={{ duration: 1, delay: 0.2, ease: "easeOut" }}
+        />
+        <svg viewBox="0 0 48 48" className="relative size-14" fill="none" stroke="#173f30" strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <motion.path
+            d="M11 25.5 20 34.5 37 14"
+            initial={reduce ? false : { pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ duration: 0.45, delay: 0.25, ease: "easeOut" }}
+          />
+        </svg>
+      </div>
+
+      <motion.h3
+        className="font-hand mt-4 text-5xl font-bold leading-none"
+        initial={reduce ? false : { opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+      >
+        {first} is added!
+      </motion.h3>
+      <motion.p
+        className="font-note mt-3 max-w-sm text-base text-moss"
+        initial={reduce ? false : { opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.65 }}
+      >
+        A welcome email{who.position ? ` for the ${who.position} role` : ""} is on its way to <strong className="text-neem">{who.email}</strong>.
+      </motion.p>
+
+      <motion.div
+        className="mt-6 flex w-full max-w-sm flex-col gap-3 sm:flex-row"
+        initial={reduce ? false : { opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.8 }}
+      >
+        <button
+          type="button"
+          onClick={onAnother}
+          autoFocus
+          className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-saffron px-6 py-3.5 text-lg font-bold text-neem shadow-[0_4px_0_#173f30] transition-transform hover:-translate-y-0.5 active:translate-y-1 active:shadow-[0_1px_0_#173f30]"
+        >
+          <UserPlus className="size-5" aria-hidden />
+          Add another
+        </button>
+        <button type="button" onClick={onDone} className="rounded-full px-6 py-3.5 text-lg font-bold ring-2 ring-neem/30 hover:bg-haldi/50">
+          Done
+        </button>
+      </motion.div>
+    </div>
+  );
+}
+
 function Stepper({ step }: { step: number }) {
   const steps = ["Who they are", "Their placement"];
   return (
@@ -290,14 +385,21 @@ function Stepper({ step }: { step: number }) {
  * Organizer-only "Add interns" button + form. Interns get an emailed link to set their own
  * password, so nothing secret is shared. Invited interns are listed under the form.
  */
-export function InviteDialog({ initial }: { initial: Invite[] }) {
+export function InviteDialog({ initial, onChange }: { initial: Invite[]; onChange?: (invites: Invite[]) => void }) {
   const [open, setOpen] = useState(false);
   const [invites, setInvites] = useState(initial);
+  const [view, setView] = useState<"active" | "completed">("active");
+  const [confirm, setConfirm] = useState<Confirm>(null);
+  const [listError, setListError] = useState("");
+  const update = (next: Invite[]) => {
+    setInvites(next);
+    onChange?.(next);
+  };
   const [form, setForm] = useState<Form>(emptyForm);
   const [step, setStep] = useState(0);
   const [otherPosition, setOtherPosition] = useState(false);
   const [error, setError] = useState("");
-  const [note, setNote] = useState("");
+  const [sent, setSent] = useState<{ name: string; email: string; position: string } | null>(null);
   const [pending, start] = useTransition();
   const waiting = invites.filter((i) => i.status === "invited").length;
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
@@ -314,7 +416,6 @@ export function InviteDialog({ initial }: { initial: Invite[] }) {
     e.preventDefault();
     if (step === 0) return next();
     setError("");
-    setNote("");
     start(async () => {
       const r = await inviteIntern({
         ...form,
@@ -324,19 +425,21 @@ export function InviteDialog({ initial }: { initial: Invite[] }) {
         startDate: form.startDate || null,
       });
       if (!r.ok) return setError(r.error);
-      setInvites(r.invites);
-      setNote(`Invite sent to ${form.email.trim()}. Add another?`);
+      update(r.invites);
+      setSent({ name: form.name.trim(), email: form.email.trim(), position: form.position.trim() });
       setForm(emptyForm);
       setOtherPosition(false);
       setStep(0);
     });
   };
 
-  const revoke = (id: string) =>
+  const act = (action: (id: string) => Promise<InviteResult>, id: string) =>
     start(async () => {
-      const r = await revokeInvite(id);
-      if (r.ok) setInvites(r.invites);
-      else setError(r.error);
+      setListError("");
+      const r = await action(id);
+      setConfirm(null);
+      if (r.ok) update(r.invites);
+      else setListError(r.error);
     });
 
   const textInput = (extra?: string) => cn(inputBase, "pl-11", extra);
@@ -348,7 +451,6 @@ export function InviteDialog({ initial }: { initial: Invite[] }) {
         setOpen(o);
         if (!o) {
           setError("");
-          setNote("");
         }
       }}
     >
@@ -370,6 +472,17 @@ export function InviteDialog({ initial }: { initial: Invite[] }) {
           They get an email link to set their own password. Nothing to share.
         </DialogDescription>
 
+        {sent ? (
+          <Sent
+            who={sent}
+            onAnother={() => setSent(null)}
+            onDone={() => {
+              setSent(null);
+              setOpen(false);
+            }}
+          />
+        ) : (
+          <>
         <Stepper step={step} />
 
         <div className="mt-6 grid gap-8 md:grid-cols-[1fr_16rem]">
@@ -524,11 +637,6 @@ export function InviteDialog({ initial }: { initial: Invite[] }) {
                 {error}
               </p>
             )}
-            {note && (
-              <p role="status" className="rounded-xl bg-tulsi px-4 py-2.5 text-sm font-semibold text-neem">
-                {note}
-              </p>
-            )}
 
             <div className="flex gap-3">
               {step === 1 && (
@@ -568,43 +676,23 @@ export function InviteDialog({ initial }: { initial: Invite[] }) {
             <Badge f={form} />
           </div>
         </div>
+          </>
+        )}
 
         {invites.length > 0 && (
-          <div className="mt-7 border-t border-neem/15 pt-5">
-            <h3 className="font-hand text-3xl font-bold leading-none">Your interns</h3>
-            <ul className="mt-2 divide-y divide-neem/10">
-              {invites.map((i) => (
-                <li key={i.id} className="flex items-center gap-3 py-3">
-                  <Avatar name={i.name ?? i.email} />
-                  <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-2 font-semibold">
-                      <span className="truncate">{i.name ?? i.email}</span>
-                      {i.position && (
-                        <span className="shrink-0 rounded-md bg-haldi px-2 py-0.5 text-xs font-bold text-neem ring-1 ring-neem/25">{i.position}</span>
-                      )}
-                    </p>
-                    <p className="truncate text-sm text-moss">
-                      {[i.college, i.email, i.phone].filter(Boolean).join(" · ")}
-                    </p>
-                  </div>
-                  <span className={cn("rounded-full px-2.5 py-1 text-xs font-bold", i.status === "joined" ? "bg-tulsi text-neem" : "bg-haldi text-neem")}>
-                    {i.status === "joined" ? "Joined" : "Invited"}
-                  </span>
-                  {i.status === "invited" && (
-                    <button
-                      type="button"
-                      onClick={() => revoke(i.id)}
-                      disabled={pending}
-                      aria-label={`Revoke invite for ${i.email}`}
-                      className="grid size-8 place-items-center rounded-full ring-1 ring-neem/25 hover:bg-kumkum hover:text-paper"
-                    >
-                      <X className="size-4" aria-hidden />
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
+          <InternList
+            invites={invites}
+            view={view}
+            setView={setView}
+            confirm={confirm}
+            setConfirm={setConfirm}
+            pending={pending}
+            error={listError}
+            onRevoke={(id) => act(revokeInvite, id)}
+            onComplete={(id) => act(completeIntern, id)}
+            onReopen={(id) => act(reopenIntern, id)}
+            onRemove={(id) => act(removeIntern, id)}
+          />
         )}
       </DialogContent>
     </Dialog>
