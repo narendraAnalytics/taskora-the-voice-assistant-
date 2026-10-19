@@ -2,6 +2,9 @@
 
 export type Status = "todo" | "progress" | "blocked" | "done" | "overdue";
 
+/** One thing an intern wrote about a task (newest first on `Intern.updates`). */
+export type InternUpdate = { task: string; text: string; status: "todo" | "progress" | "blocked" | "done"; at: string };
+
 export type Intern = {
   id: string;
   name: string;
@@ -19,6 +22,8 @@ export type Intern = {
   /** YYYY-MM-DD, null when the task has no deadline. */
   dueDate?: string | null;
   more?: number;
+  /** What this intern has written to the organizer, newest first. */
+  updates?: InternUpdate[];
   /** Whether the intern has joined (can be emailed). */
   joined?: boolean;
 };

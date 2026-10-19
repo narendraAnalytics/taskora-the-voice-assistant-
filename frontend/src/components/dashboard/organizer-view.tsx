@@ -71,6 +71,7 @@ function fromInvites(invites: Invite[], tasks: TaskView[], notes: StandupView[])
         due: t?.dueDate ? fmtDue(t.dueDate) : "—",
         update: note?.text ?? "",
         updatedAt: note ? ago(note.createdAt) : "",
+        updates: notes.filter((n) => n.inviteId === i.id).map((n) => ({ task: n.taskTitle, text: n.text, status: n.status, at: n.createdAt })),
         taskId: t?.id,
         dueDate: t?.dueDate ?? null,
         more: Math.max(0, mine.length - 1),

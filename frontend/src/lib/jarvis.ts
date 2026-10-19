@@ -1,5 +1,5 @@
 import { STATUS_LABEL, type Intern } from "./demo-data";
-import { spokenDate, todayIST } from "./task-types";
+import { agoText, spokenDate, todayIST } from "./task-types";
 
 /*
  * Rule-based stand-in for the Sarvam intent step. Same contract the real one will have:
@@ -100,6 +100,9 @@ export function respond(
 
   const t = resolvePronouns(text.toLowerCase().replace(/[?.!]/g, ""), interns, ctx);
 
+  // "What did Ravi say?", "any updates?", "read the latest messages": read out what interns wrote.
+  if (UPDATE_QUESTION.test(t) && !/\b(send|email|mail|status|progress|overview|reassign)\b/.test(t)) return updatesReply(interns, t);
+
   // "allocate task" / "allocate task to Ravi K": hand over to the task conversation in the panel.
   const allocate = /^allocate (a )?task( to (.+))?$/.exec(t);
   if (allocate) {
@@ -180,6 +183,42 @@ const listNames = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", 
 
 const NO_TASK = "No task allocated yet.";
 const hasTask = (i: Intern) => !!i.taskId;
+
+const UPDATE_QUESTION =
+  /(what (did|has|have|does)|any|latest|last|recent|new|show|read|tell me|give me|whats|what are).*(updates?|messages?|standups?|said|say|says|wrote|written|sent|reported|reports?|notes?)|\b(updates?|messages?|standups?|notes?) (from|of|by)\b|\b\w+s (update|message|standup)s?\b/;
+
+/** What interns have written: one person's latest notes, or the newest across the batch. */
+function updatesReply(interns: Intern[], t: string): Reply {
+  const named = findNames(interns, t);
+  const exact = named.filter((x) => t.includes(x.i.name.toLowerCase()));
+  const people = [...new Set((exact.length ? exact : named).map((x) => x.i))];
+  const pool = people.length ? people : interns;
+  const items = pool
+    .flatMap((p) => (p.updates ?? []).slice(0, people.length ? 3 : 2).map((u) => ({ p, u })))
+    .sort((a, b) => b.u.at.localeCompare(a.u.at))
+    .slice(0, 4);
+
+  if (!items.length) {
+    const who = people.length === 1 ? people[0] : undefined;
+    return {
+      kind: "answer",
+      text: who ? `${who.name} hasn't sent any update yet.${hasTask(who) ? "" : ` ${NO_TASK}`}` : "No updates from interns yet. When someone writes an update on a task, I'll read it out.",
+      about: who?.id,
+      chips: ["What are their tasks?", "Who's behind?"],
+    };
+  }
+  const line = ({ p, u }: (typeof items)[number]) => `${p.name} on ${u.task} (${STATUS_LABEL[u.status]}, ${agoText(u.at)}): “${u.text}”`;
+  const said = ({ p, u }: (typeof items)[number]) => `${p.name} wrote on ${u.task}, ${agoText(u.at)}, and set it to ${STATUS_LABEL[u.status].toLowerCase()}: ${u.text}`;
+  const one = people.length === 1 ? people[0] : undefined;
+  const head = one ? `Here's what ${one.name} wrote:` : "Here are the latest updates:";
+  return {
+    kind: "answer",
+    text: [head, ...items.map(line)].join("\n"),
+    speak: [head, ...items.map(said)],
+    about: one?.id,
+    chips: ["Who's behind?", "What are their tasks?"],
+  };
+}
 
 /** One spoken sentence per person, phrased by status. */
 function personLine(i: Intern, all: Intern[]) {

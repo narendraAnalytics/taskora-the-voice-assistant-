@@ -51,3 +51,13 @@ export type StandupView = {
 
 export const UPDATE_STATUSES = ["todo", "progress", "blocked", "done"] as const;
 export type UpdateStatus = (typeof UPDATE_STATUSES)[number];
+
+/** "just now", "5 min ago", "2 h ago", "3 days ago". */
+export function agoText(iso: string, now = Date.now()) {
+  const mins = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60_000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  if (mins < 1440) return `${Math.round(mins / 60)} h ago`;
+  const d = Math.round(mins / 1440);
+  return `${d} day${d > 1 ? "s" : ""} ago`;
+}
