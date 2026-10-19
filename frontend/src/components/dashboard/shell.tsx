@@ -71,8 +71,13 @@ export function Shell({
               <button
                 type="button"
                 onClick={async () => {
+                  try {
+                    sessionStorage.setItem("taskora-last-intern", name.split(" ")[0]);
+                  } catch {
+                    /* storage blocked: the goodbye page just skips the name */
+                  }
                   await authClient.signOut();
-                  router.push("/");
+                  router.push("/signed-out");
                   router.refresh();
                 }}
                 className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold ring-1 ring-neem/30 hover:bg-haldi/60 focus-visible:outline-2 focus-visible:outline-saffron"
