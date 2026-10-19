@@ -6,6 +6,7 @@ import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { internInvites } from "@/db/schema";
+import { sendInviteEmail } from "@/lib/email";
 import { LANGUAGES, MAX_SKILLS, STUDY_YEARS } from "@/lib/intern-options";
 import { requireOrganizer } from "@/lib/session";
 
@@ -126,19 +127,42 @@ export async function inviteIntern(input: InviteInput): Promise<InviteResult> {
 
   const appOrigin = await trustedOrigin();
 
+  // Clerk makes the invitation (and its sign-up link) but does not email it: we send our own branded email.
   let invitationId: string;
+  let acceptUrl: string | undefined;
+  const client = await clerkClient();
   try {
-    const client = await clerkClient();
     const inv = await client.invitations.createInvitation({
       emailAddress: email,
       redirectUrl: new URL("/sign-up", appOrigin).toString(),
-      notify: true,
+      notify: false,
       publicMetadata: { role: "intern", invitedBy: s.userId },
     });
     invitationId = inv.id;
+    acceptUrl = inv.url;
   } catch (e) {
     const msg = (e as { errors?: { longMessage?: string; message: string }[] }).errors?.[0];
     return { ok: false, error: msg?.longMessage ?? msg?.message ?? "Could not send the invite. Try again." };
+  }
+
+  const emailError = acceptUrl
+    ? await sendInviteEmail(email, {
+        internName: name,
+        organizerName: s.name,
+        acceptUrl,
+        position: profile.position,
+        college: profile.college,
+        duration: profile.durationMonths ? `${profile.durationMonths} month${profile.durationMonths > 1 ? "s" : ""}` : null,
+        startDate: profile.startDate
+          ? new Date(`${profile.startDate}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+          : null,
+        language: profile.language,
+      })
+    : "Clerk did not return an invitation link.";
+  if (emailError) {
+    // Don't leave a live invitation nobody was told about.
+    await client.invitations.revokeInvitation(invitationId).catch(() => {});
+    return { ok: false, error: emailError };
   }
 
   if (existing) {

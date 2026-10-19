@@ -1,4 +1,4 @@
-import { INTERNS, STATUS_LABEL, type Intern } from "./demo-data";
+import { STATUS_LABEL, type Intern } from "./demo-data";
 
 /*
  * Rule-based stand-in for the Sarvam intent step. Same contract the real one will have:
@@ -391,5 +391,3 @@ export function greeting(name: string, interns: Intern[] = [], hour = new Date()
     : "";
   return `${part}, ${name}! I'm Taskora, your batch coordinator.${glance} Ask me anything about your team. What would you like to know?`;
 }
-
-export { INTERNS };

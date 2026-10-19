@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { StatCards } from "@/components/dashboard/stat-cards";
-import { INTERNS, STATUS_LABEL, type Intern, type Status } from "@/lib/demo-data";
+import { STATUS_LABEL, type Intern, type Status } from "@/lib/demo-data";
 import type { Invite } from "@/app/dashboard/actions";
 import { InviteDialog } from "@/components/dashboard/invite-dialog";
 import { Jarvis } from "@/components/dashboard/jarvis";
@@ -22,8 +22,28 @@ const MIX: [Status, string][] = [
   ["overdue", "bg-saffron"],
 ];
 
+/** Interns who have joined, with no tasks yet (task tables are not in Neon yet). */
+function fromInvites(invites: Invite[]): Intern[] {
+  return invites
+    .filter((i) => i.status === "joined")
+    .map((i) => {
+      const full = i.name ?? i.email;
+      return {
+        id: i.id,
+        name: full,
+        aliases: [...new Set([full.toLowerCase(), full.split(" ")[0].toLowerCase()])],
+        task: "No task yet",
+        status: "todo" as Status,
+        progress: 0,
+        due: "—",
+        update: "",
+        updatedAt: "",
+      };
+    });
+}
+
 export function OrganizerView({ name, invites }: { name: string; invites: Invite[] }) {
-  const [interns, setInterns] = useState<Intern[]>(INTERNS);
+  const [interns, setInterns] = useState<Intern[]>(() => fromInvites(invites));
   const reduce = useReducedMotion();
 
   /* Swap who owns a task: the receiver takes the sender's task, the sender is freed up. */
@@ -41,7 +61,7 @@ export function OrganizerView({ name, invites }: { name: string; invites: Invite
 
   const count = (s: Status) => interns.filter((i) => i.status === s).length;
 
-  const feed = [...interns].sort((a, b) => (a.updatedAt === "Just now" ? -1 : b.updatedAt === "Just now" ? 1 : 0));
+  const feed = interns.filter((i) => i.update).sort((a, b) => (a.updatedAt === "Just now" ? -1 : b.updatedAt === "Just now" ? 1 : 0));
 
   return (
     <Shell name={name} role="organizer" title="Organizer dashboard" subtitle="Here is your intern batch today." action={<InviteDialog initial={invites} />}>
@@ -100,6 +120,11 @@ export function OrganizerView({ name, invites }: { name: string; invites: Invite
             )}
           </ul>
 
+          {interns.length === 0 && (
+            <p className="font-note mt-6 rounded-2xl bg-paper px-4 py-6 text-center text-moss">
+              No interns have joined yet. Use “Add interns” to invite your first one.
+            </p>
+          )}
           <ul className="mt-3 divide-y divide-neem/10">
             {interns.map((i, n) => (
               <motion.li
@@ -136,6 +161,11 @@ export function OrganizerView({ name, invites }: { name: string; invites: Invite
         <PaperCard as="section" i={6} tilt={-2} className={cn(card, "lg:col-span-5")}>
           <h2 className="font-hand text-4xl font-bold leading-none">Standups</h2>
           <p className="font-note mt-1 text-sm text-moss">What interns said out loud</p>
+          {feed.length === 0 && (
+            <p className="font-note mt-5 rounded-2xl bg-paper px-4 py-6 text-center text-moss">
+              Nothing yet. Voice standups will show up here.
+            </p>
+          )}
           <ul className="mt-5 space-y-4">
             {feed.slice(0, 5).map((i, n) => (
               <motion.li
