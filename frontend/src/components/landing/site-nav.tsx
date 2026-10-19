@@ -27,6 +27,16 @@ export function SiteNav() {
   const [dark, setDark] = useState(false);
   const { isSignedIn } = useAuth();
 
+  const [introDone, setIntroDone] = useState(false);
+
+  /* The hero announces when the intro video has finished (or was skipped). */
+  useEffect(() => {
+    const sync = () => setIntroDone(document.documentElement.dataset.intro === "done");
+    sync();
+    window.addEventListener("taskora-intro", sync);
+    return () => window.removeEventListener("taskora-intro", sync);
+  }, []);
+
   useEffect(() => {
     const update = () => {
       setPast(window.scrollY > window.innerHeight * 0.7);
@@ -45,7 +55,8 @@ export function SiteNav() {
   }, []);
 
   // Signed-in members always see their welcome + avatar, even over the hero.
-  const shown = past || focused || !!isSignedIn;
+  // Everyone else sees the bar once the intro video has finished playing.
+  const shown = past || focused || !!isSignedIn || introDone;
 
   return (
     <nav
@@ -72,9 +83,13 @@ export function SiteNav() {
             Pricing
           </a>
           <Show when="signed-out">
+            {/* Interns lose the invite email? They can request a fresh one-time link here. */}
+            <a href="/intern-login" className="rounded-full px-3 py-1.5 font-semibold hover:text-saffron">
+              Intern<span className="hidden sm:inline"> sign in</span>
+            </a>
             <SignInButton mode="modal">
               <button type="button" className="rounded-full px-3 py-1.5 font-semibold ring-2 ring-current hover:text-saffron">
-                Sign in
+                Organizer<span className="hidden sm:inline"> sign in</span>
               </button>
             </SignInButton>
           </Show>

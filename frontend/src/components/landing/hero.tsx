@@ -95,6 +95,12 @@ export function Hero() {
 
   useEffect(() => setCanReplay(!prefersReducedMotion()), []);
 
+  /* Tell the navbar when the intro has finished, so it stays hidden while the video plays. */
+  useEffect(() => {
+    document.documentElement.dataset.intro = ready ? "done" : "playing";
+    window.dispatchEvent(new Event("taskora-intro"));
+  }, [ready]);
+
   /* The office layer goes inert during a replay, so hand focus to "Skip intro". */
   useEffect(() => {
     if (replaying) skipRef.current?.focus();
