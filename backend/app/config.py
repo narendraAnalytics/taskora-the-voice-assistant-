@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     # Model ids live here only, so a Sarvam model change is a one-line edit.
     stt_model: str = "saaras:v4"
     stt_mode: str = "codemix"
+    # Intent extraction (chat). Check the Sarvam changelog: chat model names change.
+    chat_model: str = "sarvam-105b"
     tts_model: str = "bulbul:v4-flash"
     tts_default_speaker: str = "simran_en_customer"
     tts_sample_rate: int = 24000

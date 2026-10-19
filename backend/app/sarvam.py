@@ -140,3 +140,36 @@ class SarvamClient:
             for b64 in resp.json().get("audios", []):
                 audios.append(base64.b64decode(b64))
         return join_wav(audios) if codec == "wav" else b"".join(audios)
+
+    async def chat_json(self, system: str, user: str, max_tokens: int = 1500) -> dict:
+        """One chat call that must answer with a JSON object. Raises SarvamError if it does not."""
+        resp = await self._http.post(
+            f"{self._s.sarvam_base_url}/v1/chat/completions",
+            headers=self._headers,
+            json={
+                "model": self._s.chat_model,
+                "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                "temperature": 0.1,
+                "max_tokens": max_tokens,
+                "reasoning_effort": None,  # extraction needs no thinking; it only burns tokens and time
+                "response_format": {"type": "json_object"},
+            },
+        )
+        if resp.status_code != 200:
+            raise SarvamError(resp.status_code, resp.text[:300])
+        content = (resp.json().get("choices") or [{}])[0].get("message", {}).get("content") or ""
+        return parse_json_object(content)
+
+
+def parse_json_object(content: str) -> dict:
+    """Models sometimes wrap JSON in prose or code fences; take the outermost {...}."""
+    start, end = content.find("{"), content.rfind("}")
+    if start < 0 or end <= start:
+        raise SarvamError(502, "Model did not return JSON")
+    try:
+        out = json.loads(content[start : end + 1])
+    except json.JSONDecodeError:
+        raise SarvamError(502, "Model returned invalid JSON") from None
+    if not isinstance(out, dict):
+        raise SarvamError(502, "Model returned a non-object")
+    return out

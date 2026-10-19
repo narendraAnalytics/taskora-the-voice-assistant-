@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getSession, homeFor } from "@/lib/session";
 import { getInvites } from "./actions";
+import { getTasks } from "./task-actions";
 import { OrganizerView } from "@/components/dashboard/organizer-view";
 import { DashboardLoading } from "@/components/dashboard/loading";
 
@@ -12,7 +13,7 @@ async function Gate() {
   if (!s) redirect("/");
   // Interns never see the organizer dashboard — enforced here on the server.
   if (s.role === "intern") redirect(homeFor(s.role));
-  return <OrganizerView name={s.name} invites={await getInvites()} />;
+  return <OrganizerView name={s.name} invites={await getInvites()} tasks={await getTasks()} />;
 }
 
 export default function DashboardPage() {

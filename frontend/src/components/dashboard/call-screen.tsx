@@ -10,7 +10,7 @@ import { TalkingFace, type FaceMood } from "@/components/dashboard/talking-face"
 import type { SpeechMode } from "@/lib/use-speech";
 
 export type CallMsg = { from: "you" | "taskora"; text: string };
-export type CallConfirm = { task: string; fromName: string; toName: string };
+export type CallConfirm = { heading: string; parts: { text: string; bold?: boolean }[] };
 
 export const STATUS: Record<SpeechMode, string> = {
   idle: "Ready",
@@ -395,9 +395,9 @@ export function CallScreen(props: {
               className="relative w-full max-w-md rounded-2xl bg-paper p-4 text-left text-neem"
             >
               <Tape className="-top-3 left-6" />
-              <p className="text-sm font-bold">Confirm change</p>
+              <p className="text-sm font-bold">{confirm.heading}</p>
               <p className="mt-1 text-[0.98rem]">
-                Move <b>{confirm.task}</b> from <b>{confirm.fromName}</b> to <b>{confirm.toName}</b>.
+                {confirm.parts.map((p, k) => (p.bold ? <b key={k}>{p.text}</b> : <span key={k}>{p.text}</span>))}
               </p>
               <div className="mt-3 flex gap-2">
                 <button

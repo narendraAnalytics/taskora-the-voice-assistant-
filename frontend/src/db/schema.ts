@@ -1,6 +1,6 @@
 import { baUser } from "./auth-schema";
 import { sql } from "drizzle-orm";
-import { date, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { date, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 /** One row per Clerk user. `id` is the Clerk user id. */
 export const users = pgTable("users", {
@@ -50,3 +50,36 @@ export const internInvites = pgTable("intern_invites", {
 });
 
 export type InviteRow = typeof internInvites.$inferSelect;
+
+/** A task an organizer gave to one intern (the intern is identified by their invite row). */
+export const tasks = pgTable("tasks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizerId: text("organizer_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  inviteId: uuid("invite_id")
+    .notNull()
+    .references(() => internInvites.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  /** YYYY-MM-DD */
+  dueDate: date("due_date"),
+  status: text("status").$type<"todo" | "progress" | "blocked" | "done">().notNull().default("todo"),
+  progress: integer("progress").notNull().default(0),
+  emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type TaskRow = typeof tasks.$inferSelect;
+
+/** Every change to a task, for undo and "what happened to this task?". */
+export const taskEvents = pgTable("task_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  taskId: uuid("task_id")
+    .notNull()
+    .references(() => tasks.id, { onDelete: "cascade" }),
+  actorId: text("actor_id"),
+  kind: text("kind").$type<"created" | "reassigned" | "emailed">().notNull(),
+  data: jsonb("data").$type<Record<string, unknown>>().notNull().default(sql`'{}'`),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

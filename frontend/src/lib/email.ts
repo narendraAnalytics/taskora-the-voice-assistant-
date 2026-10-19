@@ -2,6 +2,7 @@ import "server-only";
 import { Resend } from "resend";
 import { InviteEmail, type InviteEmailProps } from "@/emails/invite-email";
 import { LoginEmail } from "@/emails/login-email";
+import { TaskEmail, type TaskEmailProps } from "@/emails/task-email";
 
 /** Must be an address on a domain verified in Resend, e.g. "Taskora <hello@buildflows.shop>". */
 const FROM = process.env.RESEND_FROM ?? "Taskora <onboarding@resend.dev>";
@@ -21,4 +22,9 @@ export function sendInviteEmail(to: string, props: InviteEmailProps) {
 /** Sign-in link for an intern who already joined. */
 export function sendLoginEmail(to: string, name: string, url: string) {
   return send(to, "Your Taskora sign-in link", LoginEmail({ name, url }));
+}
+
+/** "New task" email, sent only when the organizer asks for it by voice. */
+export function sendTaskEmail(to: string, props: TaskEmailProps) {
+  return send(to, `New task: ${props.title}`, TaskEmail(props));
 }

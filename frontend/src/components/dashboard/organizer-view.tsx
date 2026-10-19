@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PartyPopper } from "lucide-react";
 import { getInvites } from "@/app/dashboard/actions";
+import { getTasks, reassignTask } from "@/app/dashboard/task-actions";
+import { fmtDue, type TaskView } from "@/lib/task-types";
 import { StatCards } from "@/components/dashboard/stat-cards";
 import { STATUS_LABEL, type Intern, type Status } from "@/lib/demo-data";
 import type { Invite } from "@/app/dashboard/actions";
@@ -44,52 +46,60 @@ function ist(iso: string) {
   return `${d.toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: tz })}, ${time}`;
 }
 
-/** Interns on the batch (joined or invited), with no tasks yet (task tables are not in Neon yet). */
-function fromInvites(invites: Invite[]): Intern[] {
+/** Open tasks first (nearest deadline), then the latest finished one. */
+function mainTask(list: TaskView[]) {
+  const open = list.filter((t) => t.status !== "done").sort((x, y) => (x.dueDate ?? "9999").localeCompare(y.dueDate ?? "9999"));
+  return open[0] ?? list[0];
+}
+
+/** Interns on the batch (joined or invited), each with their main task from Neon. */
+function fromInvites(invites: Invite[], tasks: TaskView[]): Intern[] {
   return invites
     .filter((i) => i.status === "joined" || i.status === "invited")
     .map((i) => {
       const full = i.name ?? i.email;
+      const mine = tasks.filter((t) => t.inviteId === i.id);
+      const t = mainTask(mine);
       return {
         id: i.id,
         name: full,
         aliases: [...new Set([full.toLowerCase(), full.split(" ")[0].toLowerCase()])],
-        task: i.status === "invited" ? "Invite sent, not joined yet" : "Joined, no task yet",
-        status: "todo" as Status,
-        progress: 0,
-        due: "—",
+        task: t ? t.title : i.status === "invited" ? "Invite sent, not joined yet" : "Joined, no task yet",
+        status: t ? t.status : ("todo" as Status),
+        progress: t ? t.progress : 0,
+        due: t?.dueDate ? fmtDue(t.dueDate) : "—",
         update: "",
         updatedAt: "",
+        taskId: t?.id,
+        dueDate: t?.dueDate ?? null,
+        more: Math.max(0, mine.length - 1),
+        joined: i.status === "joined",
         // Only joined interns have "signed in"; an invited one has not used their invite yet.
         lastSignInAt: i.status === "joined" ? i.lastSignInAt : null,
       };
     });
 }
 
-export function OrganizerView({ invites }: { name?: string; invites: Invite[] }) {
+export function OrganizerView({ invites, tasks: firstTasks }: { name?: string; invites: Invite[]; tasks: TaskView[] }) {
   const [list, setList] = useState(invites);
-  const [interns, setInterns] = useState<Intern[]>(() => fromInvites(invites));
-  // Re-sync the board when the set of interns changes (invited, joined, completed or removed).
-  const joinedKey = list.filter((i) => i.status === "joined" || i.status === "invited").map((i) => i.id).join();
-  const [seenKey, setSeenKey] = useState(joinedKey);
-  if (joinedKey !== seenKey) {
-    setSeenKey(joinedKey);
-    setInterns(fromInvites(list));
-  }
+  const [taskList, setTaskList] = useState(firstTasks);
+  // The board is always derived from the real invites and tasks, so it follows every change.
+  const interns = useMemo(() => fromInvites(list, taskList), [list, taskList]);
   const reduce = useReducedMotion();
 
-  /* Swap who owns a task: the receiver takes the sender's task, the sender is freed up. */
-  const reassign = (fromId: string, toId: string) =>
-    setInterns((list) => {
-      const from = list.find((i) => i.id === fromId);
-      if (!from) return list;
-      return list.map((i) => {
-        if (i.id === toId)
-          return { ...i, task: from.task, status: "todo" as Status, progress: from.progress, due: from.due, update: `Took over ${from.task} from ${from.name}.`, updatedAt: "Just now" };
-        if (i.id === fromId) return { ...i, task: "No task yet", status: "todo" as Status, progress: 0, due: "—", update: `Handed ${from.task} to a teammate.`, updatedAt: "Just now" };
-        return i;
-      });
-    });
+  const refreshTasks = useCallback(async () => {
+    const next = await getTasks().catch(() => null);
+    if (next) setTaskList((cur) => (JSON.stringify(cur) === JSON.stringify(next) ? cur : next));
+  }, []);
+
+  /* Move an intern's board task to someone else (saved in Neon, then the board reloads). */
+  const reassign = async (fromId: string, toId: string) => {
+    const taskId = interns.find((i) => i.id === fromId)?.taskId;
+    if (!taskId) return { ok: false as const, error: "There is no task to move." };
+    const r = await reassignTask(taskId, toId);
+    if (r.ok) await refreshTasks();
+    return r.ok ? { ok: true as const } : r;
+  };
 
   // Pick up changes made elsewhere (an intern joining) without a reload, and say so.
   const [joinedNow, setJoinedNow] = useState<string[]>([]);
@@ -97,6 +107,7 @@ export function OrganizerView({ invites }: { name?: string; invites: Invite[] })
   useEffect(() => {
     const check = async () => {
       if (document.visibilityState !== "visible") return;
+      void refreshTasks();
       const next = await getInvites().catch(() => null);
       if (!next) return;
       const arrived = next.filter((i) => i.status === "joined" && known.current.get(i.id) === "invited").map((i) => i.name ?? i.email);
@@ -110,7 +121,7 @@ export function OrganizerView({ invites }: { name?: string; invites: Invite[] })
       window.clearInterval(t);
       document.removeEventListener("visibilitychange", check);
     };
-  }, []);
+  }, [refreshTasks]);
   useEffect(() => {
     if (!joinedNow.length) return;
     const t = window.setTimeout(() => setJoinedNow([]), 8000);
@@ -141,7 +152,7 @@ export function OrganizerView({ invites }: { name?: string; invites: Invite[] })
       </AnimatePresence>
       <div className="grid gap-5 lg:grid-cols-12">
         <PaperCard i={0} tilt={-1.5} className="lg:col-span-7">
-          <Jarvis name="Team" interns={interns} onReassign={reassign} />
+          <Jarvis name="Team" interns={interns} onReassign={reassign} onTaskChange={refreshTasks} />
         </PaperCard>
 
         <StatCards interns={interns} invited={list.filter((i) => i.status === "invited").length} />
@@ -216,7 +227,10 @@ export function OrganizerView({ invites }: { name?: string; invites: Invite[] })
                 <Avatar name={i.name} className="transition-transform group-hover:-rotate-6 group-hover:scale-110" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold">{i.name}</p>
-                  <p className="truncate text-sm text-moss">{i.task}</p>
+                  <p className="truncate text-sm text-moss">
+                    {i.task}
+                    {!!i.more && <span className="font-semibold text-neem"> · +{i.more} more</span>}
+                  </p>
                   {i.lastSignInAt && (
                     <p suppressHydrationWarning className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold text-neem">
                       <span aria-hidden className="size-2 rounded-full bg-tulsi ring-1 ring-neem/30" />

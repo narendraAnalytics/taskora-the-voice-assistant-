@@ -10,6 +10,7 @@ import { CallScreen, STATUS, ThinkingDots, UndoPill } from "@/components/dashboa
 import { useSpeech } from "@/lib/use-speech";
 import { closingKind, goodbye, greeting, isNo, isRepeat, isWait, isYes, respond, SUGGESTIONS, type Ctx, type Reply } from "@/lib/jarvis";
 import type { Intern } from "@/lib/demo-data";
+import { looksLikeNewTask, useTaskFlow, type TaskCard } from "@/components/dashboard/use-task-flow";
 
 type Msg = { from: "you" | "taskora"; text: string };
 type Pending = Extract<Reply, { kind: "clarify" }>;
@@ -20,7 +21,7 @@ type After = "question" | "listen" | "none";
 // Generic follow-ups, used on every other answer that has no specific next step to offer.
 const FOLLOW_UPS = ["Anything else you'd like to know?", "What else can I check for you?", "Anything else?"];
 const NO_PROBLEM = "No problem. What else can I help with?";
-const FRESH = "Fresh start! Ask me who's behind, how someone is doing, or to move a task.";
+const FRESH = "Fresh start! Ask me about your interns and their tasks, or tell me to give someone a task.";
 const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
 
 /**
@@ -33,12 +34,15 @@ export function Jarvis({
   name,
   interns,
   onReassign,
+  onTaskChange,
 }: {
   name: string;
   interns: Intern[];
-  onReassign: (fromId: string, toId: string) => void;
+  onReassign: (fromId: string, toId: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Called after Taskora saves a task, so the board reloads. */
+  onTaskChange: () => void;
 }) {
-  const welcome = `Welcome, ${name}! I'm Taskora, and I'll guide you through your batch. Ask me who's behind, how someone is doing, or to move a task, and I'll take care of the rest.`;
+  const welcome = `Welcome, ${name}! I'm Taskora, and I'll guide you through your batch. Ask me how many interns you have, what their tasks are, or tell me to give someone a task, and I'll take care of the rest.`;
   const [log, setLog] = useState<Msg[]>([{ from: "taskora", text: welcome }]);
   const greeted = useRef(false);
   const followUp = useRef(0);
@@ -107,15 +111,17 @@ export function Jarvis({
     [listenAgain],
   );
 
-  const confirmYes = useCallback(() => {
+  const confirmYes = useCallback(async () => {
     const c = confirmRef.current;
     const from = c && internsRef.current.find((i) => i.id === c.fromId);
     const to = c && internsRef.current.find((i) => i.id === c.toId);
     if (!c || !from || !to) return;
-    onReassign(c.fromId, c.toId);
     setConfirmBoth(null);
+    const task = from.task;
+    const r = await onReassign(c.fromId, c.toId).catch(() => ({ ok: false as const, error: "I couldn't move it just now." }));
+    if (!r.ok) return void reply(`${r.error} Anything else?`, [r.error, "Anything else?"], "question");
     convo.current = { lastId: to.id };
-    const done = `Done. ${from.task} now belongs to ${to.name}.`;
+    const done = `Done. ${task} now belongs to ${to.name}.`;
     void reply(`${done} Anything else?`, [done, "Anything else?"], "question");
   }, [onReassign, reply]);
 
@@ -123,6 +129,10 @@ export function Jarvis({
     setConfirmBoth(null);
     void reply("Okay, nothing changed. Anything else?", ["Okay, nothing changed.", "Anything else?"], "question");
   }, [reply]);
+
+  // "Give Ravi the login page by Friday": the task conversation (who, what, by when, save, email).
+  const [taskCard, setTaskCard] = useState<TaskCard | null>(null);
+  const flow = useTaskFlow({ internsRef, say: reply, setCard: setTaskCard, setChips, onChange: onTaskChange });
 
   const handle = useCallback(
     (text: string) => {
@@ -133,7 +143,20 @@ export function Jarvis({
       setNapping(false);
       setMood("neutral");
       setLog((l) => [...l, { from: "you", text }]);
+      if (!confirmRef.current && (flow.active() || looksLikeNewTask(text))) {
+        void flow.tryHandle(text).then((handled) => {
+          if (!handled) route(text);
+        });
+        return;
+      }
+      route(text);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [flow],
+  );
 
+  const route = useCallback(
+    (text: string) => {
       // An open confirm card can be answered by voice.
       if (confirmRef.current && isYes(text)) return confirmYes();
       if (confirmRef.current && isNo(text)) return confirmNo();
@@ -177,13 +200,19 @@ export function Jarvis({
         setChips(r.options.map((o) => o.name));
         return void reply(r.text, [r.text], "question");
       }
+      if (r.startTask) {
+        // "Sure. What is the task for Ravi?": the next sentence belongs to the task conversation.
+        flow.start(r.startTask.internId);
+        setChips([]);
+        return void reply(r.text, [r.text], "question");
+      }
       setChips([...new Set(r.chips ?? SUGGESTIONS)]);
       const n = followUp.current++;
       const follow = r.offer?.ask ?? (n % 2 === 0 ? FOLLOW_UPS[(n / 2) % FOLLOW_UPS.length] : null);
       const shown = follow ? `${r.text}${r.text.includes("\n") ? "\n" : " "}${follow}` : r.text;
       void reply(shown, [...[r.speak ?? r.text].flat(), ...(follow ? [follow] : [])], follow ? "question" : "listen");
     },
-    [confirmNo, confirmYes, reply],
+    [confirmNo, confirmYes, flow, reply],
   );
 
   const { supported, listening, processing, speaking, mode, transcript, seconds, error, notice, levelRef, start, stop, cancel, speak, prefetch, chime, stopPlayback, unlockAudio, releaseMic } =
@@ -210,6 +239,17 @@ export function Jarvis({
 
   const from = confirm && interns.find((i) => i.id === confirm.fromId);
   const to = confirm && interns.find((i) => i.id === confirm.toId);
+  // One card for both kinds of confirmation: a new task, or moving an existing one.
+  const card: TaskCard | null =
+    taskCard ??
+    (confirm && from && to
+      ? {
+          heading: "Confirm change",
+          parts: [{ text: "Move " }, { text: from.task, bold: true }, { text: " from " }, { text: from.name, bold: true }, { text: " to " }, { text: to.name, bold: true }, { text: "." }],
+        }
+      : null);
+  const cardYes = () => void (taskCard ? flow.yes() : confirmYes());
+  const cardNo = () => (taskCard ? flow.no() : confirmNo());
   // The first time full view opens, Taskora greets you out loud and then listens. The click is the
   // user gesture that lets the browser play audio; later opens stay quiet.
   const openFull = () => {
@@ -263,6 +303,7 @@ export function Jarvis({
     setLog([{ from: "taskora", text: FRESH }]);
     setChips(SUGGESTIONS);
     setConfirmBoth(null);
+    flow.cancel();
     pendingRef.current = null;
     convo.current = {};
     last.current = null;
@@ -281,7 +322,7 @@ export function Jarvis({
     cleared.current = null;
     setUndoable(false);
   };
-  const canClear = log.length > 1 || confirm !== null;
+  const canClear = log.length > 1 || confirm !== null || taskCard !== null;
   const toggleHandsFree = () => {
     setHandsFree((h) => !h);
     if (listening && handsFree) cancel();
@@ -391,7 +432,7 @@ export function Jarvis({
             <ThinkingDots />
           </p>
         )}
-        {confirm && from && to && (
+        {card && (
           <motion.div
             initial={reduce ? false : { opacity: 0, y: 20, rotate: -3 }}
             animate={{ opacity: 1, y: 0, rotate: 0 }}
@@ -399,21 +440,21 @@ export function Jarvis({
             className="relative rounded-2xl bg-paper p-4 text-neem"
           >
             <Tape className="-top-3 left-6" />
-            <p className="text-sm font-bold">Confirm change</p>
+            <p className="text-sm font-bold">{card.heading}</p>
             <p className="mt-1 text-[0.98rem]">
-              Move <b>{from.task}</b> from <b>{from.name}</b> to <b>{to.name}</b>.
+              {card.parts.map((p, k) => (p.bold ? <b key={k}>{p.text}</b> : <span key={k}>{p.text}</span>))}
             </p>
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
-                onClick={confirmYes}
+                onClick={cardYes}
                 className="rounded-full bg-saffron px-4 py-2 text-sm font-bold text-neem hover:bg-[#ef7740]"
               >
                 Confirm
               </button>
               <button
                 type="button"
-                onClick={confirmNo}
+                onClick={cardNo}
                 className="rounded-full px-4 py-2 text-sm font-bold ring-2 ring-neem hover:bg-paper-deep"
               >
                 Cancel
@@ -488,7 +529,7 @@ export function Jarvis({
           error={error}
           notice={notice}
           log={log}
-          confirm={confirm && from && to ? { task: from.task, fromName: from.name, toName: to.name } : null}
+          confirm={card}
           suggestions={chips}
           muted={muted}
           handsFree={handsFree}
@@ -500,8 +541,8 @@ export function Jarvis({
           onToggleMute={toggleMute}
           onMic={toggleMic}
           onSend={handle}
-          onConfirm={confirmYes}
-          onCancel={confirmNo}
+          onConfirm={cardYes}
+          onCancel={cardNo}
           onClose={closeFull}
         />
       )}

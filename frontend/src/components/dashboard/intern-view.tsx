@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CalendarDays, Check, ClipboardList, GraduationCap, Languages, Mic, School, Sparkles, Square } from "lucide-react";
-import { STATUS_LABEL, type MyTask, type Status } from "@/lib/demo-data";
+import { fmtDue, type TaskView } from "@/lib/task-types";
 import { useSpeech } from "@/lib/use-speech";
 import { StatusChip } from "@/components/dashboard/status-chip";
 import { Shell } from "@/components/dashboard/shell";
@@ -96,9 +96,8 @@ function Placement({ p }: { p: InternProfile }) {
   );
 }
 
-export function InternView({ name, profile }: { name: string; profile?: InternProfile | null }) {
-  // No task table in Neon yet: an intern starts with none, and the organizer assigns them later.
-  const [tasks, setTasks] = useState<MyTask[]>([]);
+/** `tasks` are this intern's own, loaded on the server from their own invite. Read-only for now. */
+export function InternView({ name, profile, tasks = [] }: { name: string; profile?: InternProfile | null; tasks?: TaskView[] }) {
   const reduce = useReducedMotion();
   const [update, setUpdate] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -114,8 +113,6 @@ export function InternView({ name, profile }: { name: string; profile?: InternPr
   const ring = Math.min(seconds / MAX, 1);
   const done = tasks.filter((t) => t.status === "done").length;
 
-  const setStatus = (id: string, status: Status) =>
-    setTasks((l) => l.map((t) => (t.id === id ? { ...t, status, progress: status === "done" ? 100 : t.progress } : t)));
 
   return (
     <Shell name={name} role="intern" title="Intern workspace" subtitle="Give your 20-second standup. Taskora does the rest.">
@@ -270,23 +267,7 @@ export function InternView({ name, profile }: { name: string; profile?: InternPr
                     <p className="font-semibold leading-snug">{t.title}</p>
                     <StatusChip status={t.status} />
                   </div>
-                  <p className="mt-1 text-xs text-moss">Due {t.due}</p>
-                  <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label={`Set status for ${t.title}`}>
-                    {(["todo", "progress", "blocked", "done"] as Status[]).map((s) => (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => setStatus(t.id, s)}
-                        aria-pressed={t.status === s}
-                        className={cn(
-                          "rounded-full px-3 py-1 text-xs font-bold ring-1 ring-neem/25 transition-colors",
-                          t.status === s ? "bg-neem text-paper ring-neem" : "hover:bg-paper-deep",
-                        )}
-                      >
-                        {STATUS_LABEL[s]}
-                      </button>
-                    ))}
-                  </div>
+                  <p className="mt-1 text-xs font-semibold text-moss">Due {fmtDue(t.dueDate)}</p>
                 </motion.li>
               ))}
             </ul>

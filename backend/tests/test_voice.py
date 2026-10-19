@@ -48,6 +48,9 @@ def client(monkeypatch):
         assert req.headers["api-subscription-key"] == "k"
         if req.url.path == "/speech-to-text":
             return httpx.Response(200, json={"transcript": "hello", "language_code": "en-IN"})
+        if req.url.path == "/v1/chat/completions":
+            reply = '```json\n{"action": "assign_task", "person": "Ravi", "title": "Login page", "due": "2099-01-02", "send_email": true}\n```'
+            return httpx.Response(200, json={"choices": [{"message": {"content": reply}}]})
         return httpx.Response(200, json={"audios": [base64.b64encode(wav()).decode()]})
 
     from app.main import create_app
@@ -82,3 +85,29 @@ def test_tts_rejects_bad_codec(client):
 
 def test_tts_rejects_bad_language(client):
     assert client.post("/voice/tts", json={"text": "x", "language_code": "xx"}).status_code == 422
+
+
+INTENT = {"text": "give Ravi the login page by friday and mail him", "today": "2026-10-19", "weekday": "Monday", "interns": ["Ravi", "Anjali"]}
+
+
+def test_intent_extracts_task(client):
+    r = client.post("/voice/intent", json=INTENT)
+    assert r.status_code == 200
+    assert r.json() == {"action": "assign_task", "person": "Ravi", "title": "Login page", "due": "2099-01-02", "send_email": True}
+
+
+def test_intent_drops_past_deadline(client):
+    r = client.post("/voice/intent", json={**INTENT, "today": "2100-01-01"})
+    assert r.status_code == 200 and r.json()["due"] is None
+
+
+def test_intent_rejects_bad_date(client):
+    assert client.post("/voice/intent", json={**INTENT, "today": "tomorrow"}).status_code == 422
+
+
+def test_parse_json_object_handles_prose_and_garbage():
+    from app.sarvam import SarvamError, parse_json_object
+
+    assert parse_json_object('Sure! {"a": 1} done') == {"a": 1}
+    with pytest.raises(SarvamError):
+        parse_json_object("no json here")

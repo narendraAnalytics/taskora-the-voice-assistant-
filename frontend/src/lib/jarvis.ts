@@ -1,4 +1,5 @@
 import { STATUS_LABEL, type Intern } from "./demo-data";
+import { spokenDate, todayIST } from "./task-types";
 
 /*
  * Rule-based stand-in for the Sarvam intent step. Same contract the real one will have:
@@ -17,14 +18,23 @@ export type Offer = { ask: string; run?: string };
 export type Ctx = { lastId?: string; offer?: Offer };
 
 type Clarify = { kind: "clarify"; text: string; options: Intern[]; then: { type: "reassign"; fromId: string } | { type: "reassign-target"; fromId: string } | { type: "lookup" } };
-type Answer = { kind: "answer"; text: string; speak?: string | string[]; offer?: Offer; chips?: string[]; about?: string };
+type Answer = {
+  kind: "answer";
+  text: string;
+  speak?: string | string[];
+  offer?: Offer;
+  chips?: string[];
+  about?: string;
+  /** Start the "give someone a task" conversation (optionally for a known intern). */
+  startTask?: { internId?: string };
+};
 type Confirm = { kind: "confirm"; text: string; fromId: string; toId: string };
 export type Reply = Answer | Clarify | Confirm;
 
-export const SUGGESTIONS = ["Brief me on everyone", "Who's behind?", "How many interns do I have?", "What's due today?", "Reassign Anjali's task to Kiran"];
+export const SUGGESTIONS = ["Allocate a task", "How many interns do I have?", "What are their tasks?", "Who's behind?", "What's due today?"];
 
 const first = (s: string) => s.split(" ")[0];
-const words = (text: string) =>
+export const words = (text: string) =>
   text.toLowerCase().replace(/[’']/g, "").replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim();
 
 /** Interns whose name or aliases contain the spoken name as a whole word. */
@@ -90,6 +100,14 @@ export function respond(
 
   const t = resolvePronouns(text.toLowerCase().replace(/[?.!]/g, ""), interns, ctx);
 
+  // "allocate task" / "allocate task to Ravi K": hand over to the task conversation in the panel.
+  const allocate = /^allocate (a )?task( to (.+))?$/.exec(t);
+  if (allocate) {
+    const who = allocate[3] ? matchInterns(interns, allocate[3]) : [];
+    if (who.length === 1) return { kind: "answer", text: `Sure. What is the task for ${who[0].name}?`, startTask: { internId: who[0].id } };
+    return { kind: "answer", text: "Sure. Who should get the task, and what is it?", startTask: {} };
+  }
+
   // Answer to an earlier "which one?" question.
   if (pending) {
     const pick = pending.options.find((o) => t.includes(o.name.toLowerCase()) || o.aliases.some((a) => a !== first(o.name).toLowerCase() && t.includes(a)));
@@ -113,6 +131,7 @@ export function respond(
     if (f.many) return { kind: "clarify", text: `Which one: ${f.many.map((m) => m.name).join(" or ")}?`, options: f.many, then: { type: "reassign", fromId: "" } };
     if (g.many) return { kind: "clarify", text: `Which one: ${g.many.map((m) => m.name).join(" or ")}?`, options: g.many, then: { type: "reassign-target", fromId: f.one?.id ?? "" } };
     if (f.one && g.one) {
+      if (!f.one.taskId) return { kind: "answer", text: `${f.one.name} has no task allocated yet, so there is nothing to move.`, about: f.one.id };
       if (f.one.id === g.one.id) return { kind: "answer", text: `${f.one.name} already has that task.`, about: f.one.id };
       return {
         kind: "confirm",
@@ -150,17 +169,22 @@ export function respond(
   };
 }
 
-const DAYS: Record<string, string> = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
-/** "due today", "due Friday", "was due 2 days ago" */
+/** "due today", "due Friday 23 October", "was due Friday 16 October", "no deadline" */
 function dueText(i: Intern) {
-  if (/ago$/i.test(i.due)) return `was due ${i.due}`;
-  return `due ${DAYS[i.due] ?? i.due.toLowerCase()}`;
+  if (!i.dueDate) return "no deadline";
+  const today = todayIST();
+  if (i.dueDate === today) return "due today";
+  return `${i.dueDate < today ? "was due" : "due"} ${spokenDate(i.dueDate)}`;
 }
 const listNames = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}` : (xs[0] ?? ""));
+
+const NO_TASK = "No task allocated yet.";
+const hasTask = (i: Intern) => !!i.taskId;
 
 /** One spoken sentence per person, phrased by status. */
 function personLine(i: Intern, all: Intern[]) {
   const n = short(i, all);
+  if (!hasTask(i)) return `${n} has no task allocated yet.`;
   switch (i.status) {
     case "done":
       return `${n} has finished ${i.task}.`;
@@ -176,7 +200,9 @@ function personLine(i: Intern, all: Intern[]) {
 }
 /** Screen line per person: everything we know. */
 const detailLine = (i: Intern) =>
-  `${i.name}: ${i.task}, ${STATUS_LABEL[i.status].toLowerCase()}, ${i.progress}%, ${dueText(i)}. Last update ${i.updatedAt}: ${i.update}`;
+  hasTask(i)
+    ? `${i.name}: ${i.task}${i.more ? ` (+${i.more} more)` : ""}, ${STATUS_LABEL[i.status].toLowerCase()}, ${dueText(i)}.`
+    : `${i.name}: ${NO_TASK.toLowerCase()}`;
 /** Spoken sentences grouped two at a time, so the first clip is short and starts quickly. */
 const pairs = (xs: string[]) => xs.reduce<string[]>((acc, s, k) => (k % 2 ? [...acc.slice(0, -1), `${acc.at(-1)} ${s}`] : [...acc, s]), []);
 
@@ -184,18 +210,33 @@ const pairs = (xs: string[]) => xs.reduce<string[]>((acc, s, k) => (k % 2 ? [...
 function teamQuestion(interns: Intern[], t: string): Reply | null {
   const n = interns.length;
   const names = interns.map((i) => i.name);
+  const tasked = interns.filter(hasTask);
   const late = interns.filter(isBehind);
   const nextOffer = (): Offer | undefined => (late.length ? { ask: "Want me to go through who's behind?", run: "who's behind" } : undefined);
 
-  // A full briefing on everyone, first to last.
-  if (/(brief|rundown|run me through|walk me through|everyone|every one|all (the )?details|each (intern|person|one|member)|full (report|details|picture|update)|tell me (about|everything about) (the|my) (team|batch|interns)|details of (all|everyone|the team|my team)|who is doing what|whos doing what|what is everyone)/.test(t)) {
+  if (n === 0 && /(how many|team size|number of|headcount|count|brief|everyone|tasks?|team members|my (team|interns))/.test(t)) {
+    return { kind: "answer", text: "You have no interns yet. Use “Add interns” to invite your first one.", chips: [] };
+  }
+
+  // A full briefing on everyone, first to last, or the list of tasks.
+  if (/(brief|rundown|run me through|walk me through|everyone|every one|all (the )?details|each (intern|person|one|member)|full (report|details|picture|update)|tell me (about|everything about) (the|my) (team|batch|interns)|details of (all|everyone|the team|my team)|who is doing what|whos doing what|what is everyone|(what|which) (are|is) (their|the|each|every).*tasks?|(their|each|every|all|the) tasks?|tasks? (of|for) (everyone|all|each|them)|(list|show|tell me) .*tasks?)/.test(t)) {
+    const idle = interns.find((i) => !hasTask(i));
+    if (!tasked.length) {
+      return {
+        kind: "answer",
+        text: `You have ${n} intern${n > 1 ? "s" : ""}: ${listNames(names)}. ${NO_TASK}`,
+        speak: [`You have ${n} intern${n > 1 ? "s" : ""}: ${listNames(interns.map((i) => short(i, interns)))}.`, NO_TASK],
+        offer: { ask: "Do you want to allocate a task?", run: "allocate task" },
+        chips: ["Allocate a task"],
+      };
+    }
     const lines = interns.map((i) => personLine(i, interns));
     return {
       kind: "answer",
       text: [`Here's your batch of ${n}:`, ...interns.map(detailLine)].join("\n"),
       speak: [`Here's your batch of ${n}.`, ...pairs(lines)],
-      offer: nextOffer(),
-      chips: ["Who's behind?", "What's due today?", "Team status"],
+      offer: idle ? { ask: `Want to allocate a task to ${short(idle, interns)}?`, run: `allocate task to ${idle.name}` } : nextOffer(),
+      chips: [idle ? "Allocate a task" : "Who's behind?", "What's due today?", "Team status"],
     };
   }
 
@@ -205,8 +246,8 @@ function teamQuestion(interns: Intern[], t: string): Reply | null {
       kind: "answer",
       text: `You have ${n} interns: ${listNames(names)}.`,
       speak: `You have ${n} interns: ${listNames(interns.map((i) => short(i, interns)))}.`,
-      offer: { ask: "Want a quick rundown of what each of them is doing?", run: "brief me on everyone" },
-      chips: ["Brief me on everyone", "Who's done?", "Who's behind?"],
+      offer: { ask: "Want a quick rundown of their tasks?", run: "what are their tasks" },
+      chips: ["What are their tasks?", "Who's done?", "Who's behind?"],
     };
   }
 
@@ -220,9 +261,10 @@ function teamQuestion(interns: Intern[], t: string): Reply | null {
   ).find(([, re]) => re.test(t));
   if (group && /\b(who|whos|which|anyone|anybody|how many|list)\b/.test(t)) {
     const [status, , one, many, none] = group;
-    const xs = interns.filter((i) => i.status === status);
+    const xs = tasked.filter((i) => i.status === status);
+    if (!tasked.length) return { kind: "answer", text: `${NO_TASK}`, offer: { ask: "Do you want to allocate a task?", run: "allocate task" }, chips: ["Allocate a task"] };
     if (!xs.length) return { kind: "answer", text: none, chips: ["Brief me on everyone", "Team status"] };
-    const count = `${xs.length} of ${n} ${xs.length === 1 ? one : many}.`;
+    const count = `${xs.length} of ${tasked.length} ${xs.length === 1 ? one : many}.`;
     return {
       kind: "answer",
       text: `${count} ${xs.map((i) => `${i.name}: ${i.task}, ${i.progress}%, ${dueText(i)}`).join(". ")}.`,
@@ -235,7 +277,9 @@ function teamQuestion(interns: Intern[], t: string): Reply | null {
   // Deadlines.
   if (/(due|deadline|deadlines)/.test(t)) {
     const today = /today/.test(t);
-    const xs = today ? interns.filter((i) => /^today$/i.test(i.due) || /ago$/i.test(i.due)) : interns.filter((i) => i.status !== "done");
+    const now = todayIST();
+    const xs = today ? tasked.filter((i) => i.status !== "done" && !!i.dueDate && i.dueDate <= now) : tasked.filter((i) => i.status !== "done");
+    if (!tasked.length) return { kind: "answer", text: `${NO_TASK}`, offer: { ask: "Do you want to allocate a task?", run: "allocate task" }, chips: ["Allocate a task"] };
     if (!xs.length) return { kind: "answer", text: today ? "Nothing is due today." : "Every task is done.", chips: ["Brief me on everyone"] };
     const said = xs.map((i) => `${short(i, interns)}'s ${i.task} ${/^was/.test(dueText(i)) ? "" : "is "}${dueText(i)}`);
     return {
@@ -248,20 +292,21 @@ function teamQuestion(interns: Intern[], t: string): Reply | null {
   }
 
   // Who is working on a task ("who has the login page?").
-  const byTask = interns.find((i) => t.includes(i.task.toLowerCase())) ??
+  const byTask = tasked.find((i) => t.includes(i.task.toLowerCase())) ??
     (/(working on|who has|who owns|whos on|who is on|assigned|handling|doing the|in charge of)/.test(t)
-      ? interns.find((i) => t.includes(i.task.toLowerCase().split(" ")[0]))
+      ? tasked.find((i) => t.includes(i.task.toLowerCase().split(" ")[0]))
       : undefined);
   if (byTask) return describe(interns, byTask);
 
   // Overall progress.
   if (/(overall|average|total) progress|how far (along|are we)|percent(age)? (done|complete)/.test(t)) {
-    const avg = Math.round(interns.reduce((s, i) => s + i.progress, 0) / n);
-    const done = interns.filter((i) => i.status === "done").length;
+    if (!tasked.length) return { kind: "answer", text: `${NO_TASK}`, offer: { ask: "Do you want to allocate a task?", run: "allocate task" }, chips: ["Allocate a task"] };
+    const avg = Math.round(tasked.reduce((s, i) => s + i.progress, 0) / tasked.length);
+    const done = tasked.filter((i) => i.status === "done").length;
     return {
       kind: "answer",
-      text: `Overall the batch is ${avg}% through its tasks. ${done} of ${n} tasks ${done === 1 ? "is" : "are"} done.`,
-      speak: `Overall, the batch is ${avg} percent through its tasks, and ${done} of ${n} ${done === 1 ? "is" : "are"} done.`,
+      text: `Overall the batch is ${avg}% through its tasks. ${done} of ${tasked.length} tasks ${done === 1 ? "is" : "are"} done.`,
+      speak: `Overall, the batch is ${avg} percent through its tasks, and ${done} of ${tasked.length} ${done === 1 ? "is" : "are"} done.`,
       offer: nextOffer(),
       chips: ["Brief me on everyone", "Who's behind?"],
     };
@@ -295,6 +340,16 @@ function behind(interns: Intern[]): Reply {
 }
 
 function describe(interns: Intern[], i: Intern): Reply {
+  if (!hasTask(i)) {
+    return {
+      kind: "answer",
+      text: `${i.name} has no task allocated yet.`,
+      speak: [`${short(i, interns)} has no task allocated yet.`],
+      offer: { ask: `Want to allocate a task to ${short(i, interns)}?`, run: `allocate task to ${i.name}` },
+      about: i.id,
+      chips: ["Allocate a task", "Brief me on everyone"],
+    };
+  }
   const free = isBehind(i) ? freeIntern(interns, i.id) : undefined;
   const others = interns.filter((x) => x.id !== i.id && isBehind(x));
   const offer: Offer | undefined = free
@@ -304,8 +359,8 @@ function describe(interns: Intern[], i: Intern): Reply {
       : { ask: "Should I check on anyone else?" };
   return {
     kind: "answer",
-    text: `${i.name} is ${STATUS_LABEL[i.status].toLowerCase()} on ${i.task}, ${i.progress} percent, ${dueText(i)}. Last update ${i.updatedAt}: ${i.update}`,
-    speak: `${personLine(i, interns).slice(0, -1)}${i.status === "done" ? "" : `, ${dueText(i)}`}. Latest update: ${i.update}`,
+    text: `${i.name} is ${STATUS_LABEL[i.status].toLowerCase()} on ${i.task}${i.more ? ` (+${i.more} more)` : ""}, ${dueText(i)}.${i.update ? ` Last update ${i.updatedAt}: ${i.update}` : ""}`,
+    speak: `${personLine(i, interns).slice(0, -1)}${i.status === "done" ? "" : `, ${dueText(i)}`}.${i.update ? ` Latest update: ${i.update}` : ""}`,
     offer,
     about: i.id,
     chips: [...others.slice(0, 2).map((x) => howIs(x, interns)), "Who's behind?", "Team status"].slice(0, 3),
@@ -313,7 +368,17 @@ function describe(interns: Intern[], i: Intern): Reply {
 }
 
 function teamStatus(interns: Intern[]): Reply {
-  const c = (s: string) => interns.filter((i) => i.status === s).length;
+  const idle = interns.filter((i) => !hasTask(i));
+  if (!interns.some(hasTask)) {
+    return {
+      kind: "answer",
+      text: `${interns.length} interns. ${NO_TASK}`,
+      speak: `You have ${interns.length} interns. ${NO_TASK}`,
+      offer: { ask: "Do you want to allocate a task?", run: "allocate task" },
+      chips: ["Allocate a task"],
+    };
+  }
+  const c = (s: string) => interns.filter((i) => hasTask(i) && i.status === s).length;
   const parts = (
     [
       ["done", "done"],
@@ -325,13 +390,18 @@ function teamStatus(interns: Intern[]): Reply {
   )
     .filter(([s]) => c(s) > 0)
     .map(([s, label]) => `${c(s)} ${label}`);
+  if (idle.length) parts.push(`${idle.length} with no task yet`);
   const spoken = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : parts[0];
   const late = interns.filter(isBehind).length;
   return {
     kind: "answer",
     text: `${interns.length} interns. ${parts.join(", ")}.`,
     speak: `You have ${interns.length} interns: ${spoken}.`,
-    offer: late ? { ask: "Want to hear who's behind?", run: "who's behind" } : undefined,
+    offer: late
+      ? { ask: "Want to hear who's behind?", run: "who's behind" }
+      : idle.length
+        ? { ask: `Want to allocate a task to ${short(idle[0], interns)}?`, run: `allocate task to ${idle[0].name}` }
+        : undefined,
     chips: ["Who's behind?", ...[...new Set([...interns.filter(isBehind), ...interns])].slice(0, 2).map((i) => howIs(i, interns))],
   };
 }

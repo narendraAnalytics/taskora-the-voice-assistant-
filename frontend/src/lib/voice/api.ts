@@ -34,3 +34,22 @@ export async function synthesize(text: string, token: string | null, languageCod
   );
   return res.arrayBuffer();
 }
+
+export type TaskDraft = { person: string | null; title: string | null; due: string | null; send_email: boolean | null };
+export type TaskIntent = TaskDraft & { action: "assign_task" | "other" };
+
+/** Turn a spoken sentence into who / what / by when, merged with what was already collected (`draft`). */
+export async function extractTaskIntent(
+  text: string,
+  token: string | null,
+  ctx: { today: string; weekday: string; interns: string[]; draft: TaskDraft | null },
+): Promise<TaskIntent> {
+  const res = await ensureOk(
+    await fetch(`${BASE}/voice/intent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ text, ...ctx }),
+    }),
+  );
+  return res.json();
+}

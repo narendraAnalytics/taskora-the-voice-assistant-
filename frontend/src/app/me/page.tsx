@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { currentInternInvite, getInternSession, getSession } from "@/lib/session";
+import { listTasksForInvite } from "@/lib/tasks";
 import { InternView } from "@/components/dashboard/intern-view";
 import { DashboardLoading } from "@/components/dashboard/loading";
 
@@ -13,10 +14,11 @@ async function Gate() {
     const profile = i
       ? { position: i.position, college: i.college, degree: i.degree, studyYear: i.studyYear, months: i.durationMonths, startDate: i.startDate, language: i.language, skills: i.skills }
       : null;
-    return <InternView name={intern.name} profile={profile} />;
+    const tasks = i ? await listTasksForInvite(i.id) : [];
+    return <InternView name={intern.name} profile={profile} tasks={tasks} />;
   }
   const s = await getSession();
-  if (!s) redirect("/");
+  if (!s) redirect("/intern-login");
   if (s.role !== "intern") redirect("/dashboard");
   return <InternView name={s.name} />;
 }

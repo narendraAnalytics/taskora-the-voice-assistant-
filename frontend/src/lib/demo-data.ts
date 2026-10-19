@@ -14,6 +14,13 @@ export type Intern = {
   updatedAt: string;
   /** ISO time of the intern's latest sign-in, for the organizer board. */
   lastSignInAt?: string | null;
+  /** The task shown on the board (the real `tasks` row) and how many more this intern has. */
+  taskId?: string;
+  /** YYYY-MM-DD, null when the task has no deadline. */
+  dueDate?: string | null;
+  more?: number;
+  /** Whether the intern has joined (can be emailed). */
+  joined?: boolean;
 };
 
 export const STATUS_LABEL: Record<Status, string> = {

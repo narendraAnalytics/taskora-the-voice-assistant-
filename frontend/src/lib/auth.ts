@@ -7,14 +7,9 @@ import { and, desc, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { baAccount, baSession, baUser, baVerification } from "@/db/auth-schema";
 import { internInvites } from "@/db/schema";
+import { BASE_URL } from "@/lib/base-url";
 import { sendInviteEmail, sendLoginEmail } from "@/lib/email";
 
-/**
- * Links in emails are always built on this pinned origin, never on the request's Host header (which an
- * attacker controls). Set BETTER_AUTH_URL in production; without it production falls back to the live site.
- */
-const BASE_URL =
-  process.env.BETTER_AUTH_URL ?? (process.env.NODE_ENV === "production" ? "https://taskora-kappa-seven.vercel.app" : "http://localhost:3000");
 const pinned = (url: string) => {
   const u = new URL(url);
   return new URL(u.pathname + u.search, BASE_URL).toString();
