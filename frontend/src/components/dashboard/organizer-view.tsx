@@ -24,6 +24,16 @@ const MIX: [Status, string][] = [
   ["overdue", "bg-saffron"],
 ];
 
+/** "just now", "5 min ago", "2 h ago", "3 days ago". */
+function ago(iso: string) {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  if (mins < 1440) return `${Math.round(mins / 60)} h ago`;
+  const d = Math.round(mins / 1440);
+  return `${d} day${d > 1 ? "s" : ""} ago`;
+}
+
 /** Interns on the batch (joined or invited), with no tasks yet (task tables are not in Neon yet). */
 function fromInvites(invites: Invite[]): Intern[] {
   return invites
@@ -40,6 +50,7 @@ function fromInvites(invites: Invite[]): Intern[] {
         due: "—",
         update: "",
         updatedAt: "",
+        lastSignInAt: i.lastSignInAt,
       };
     });
 }
@@ -195,6 +206,12 @@ export function OrganizerView({ invites }: { name?: string; invites: Invite[] })
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold">{i.name}</p>
                   <p className="truncate text-sm text-moss">{i.task}</p>
+                  {i.lastSignInAt && (
+                    <p className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold text-neem">
+                      <span aria-hidden className="size-2 rounded-full bg-tulsi ring-1 ring-neem/30" />
+                      Signed in {ago(i.lastSignInAt)}
+                    </p>
+                  )}
                   <GrowBar
                     value={i.progress}
                     className="mt-1.5 h-1.5 w-full max-w-[14rem]"

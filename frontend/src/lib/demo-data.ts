@@ -12,6 +12,8 @@ export type Intern = {
   due: string;
   update: string;
   updatedAt: string;
+  /** ISO time of the intern's latest sign-in, for the organizer board. */
+  lastSignInAt?: string | null;
 };
 
 export const STATUS_LABEL: Record<Status, string> = {

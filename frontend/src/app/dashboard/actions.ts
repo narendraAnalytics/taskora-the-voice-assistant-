@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import { clerkClient } from "@clerk/nextjs/server";
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { baSession, baUser } from "@/db/auth-schema";
@@ -26,6 +26,8 @@ export type Invite = {
   language: string | null;
   status: "invited" | "joined" | "completed" | "revoked";
   invitedAt: string;
+  /** Most recent intern sign-in (newest session), if any. */
+  lastSignInAt: string | null;
 };
 export type InviteResult = { ok: true; invites: Invite[] } | { ok: false; error: string };
 
@@ -71,7 +73,10 @@ export type InviteInput = z.input<typeof inviteSchema>;
 
 async function listFor(organizerId: string): Promise<Invite[]> {
   const rows = await db
-    .select()
+    .select({
+      ...getTableColumns(internInvites),
+      lastSignInAt: sql<string | null>`(select max(${baSession.createdAt}) from ${baSession} where ${baSession.userId} = ${internInvites.internUserId})`,
+    })
     .from(internInvites)
     .where(eq(internInvites.organizerId, organizerId))
     .orderBy(desc(internInvites.invitedAt));
@@ -92,6 +97,7 @@ async function listFor(organizerId: string): Promise<Invite[]> {
       language: r.language,
       status: r.status,
       invitedAt: r.invitedAt.toISOString(),
+      lastSignInAt: r.lastSignInAt ? new Date(r.lastSignInAt).toISOString() : null,
     }));
 }
 

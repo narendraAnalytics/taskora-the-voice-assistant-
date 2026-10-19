@@ -19,7 +19,7 @@ export type Session = {
  */
 export async function getSession(): Promise<Session | null> {
   const { userId } = await clerkAuth();
-  if (!userId) return internSession();
+  if (!userId) return getInternSession();
 
   const [row] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (row) {
@@ -44,7 +44,7 @@ export async function getSession(): Promise<Session | null> {
  * has none, so a leftover cookie gets nothing. The first valid session after the invite email marks the
  * invite as joined.
  */
-async function internSession(): Promise<Session | null> {
+export async function getInternSession(): Promise<Session | null> {
   const found = await currentInternInvite();
   if (!found) return null;
   const { ba, invite } = found;
