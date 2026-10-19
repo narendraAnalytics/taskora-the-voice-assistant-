@@ -17,9 +17,10 @@ async function Gate() {
     const tasks = i ? await listTasksForInvite(i.id) : [];
     return <InternView name={intern.name} profile={profile} tasks={tasks} />;
   }
+  // No intern session here. An organizer signed in to Clerk in this same browser must not land on their own
+  // dashboard when they open an intern's link: send everyone without an intern session to intern sign-in.
   const s = await getSession();
-  if (!s) redirect("/intern-login");
-  if (s.role !== "intern") redirect("/dashboard");
+  if (!s || s.role !== "intern") redirect("/intern-login");
   return <InternView name={s.name} />;
 }
 

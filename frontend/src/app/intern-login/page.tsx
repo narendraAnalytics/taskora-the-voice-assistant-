@@ -8,7 +8,7 @@ export const metadata = { title: "Intern sign in — Taskora" };
 async function Gate({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const [s, q] = await Promise.all([getSession(), searchParams]);
   if (s?.role === "intern") redirect("/me");
-  if (s) redirect("/dashboard");
+  // An organizer signed in to Clerk still sees this form: they may be opening an intern's link in this browser.
   return <InternLogin linkProblem={Boolean(q.error)} />;
 }
 
