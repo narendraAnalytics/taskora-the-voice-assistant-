@@ -191,11 +191,11 @@ function personLine(i: Intern, all: Intern[]) {
     case "todo":
       return `${n} hasn't started ${i.task} yet.`;
     case "blocked":
-      return `${n} is blocked on ${i.task} at ${i.progress} percent.`;
+      return `${n} is blocked on ${i.task}${i.update ? `. They said: ${i.update}` : "."}`;
     case "overdue":
-      return `${n} is overdue on ${i.task}, ${i.progress} percent done.`;
+      return `${n} is overdue on ${i.task}.`;
     default:
-      return `${n} is working on ${i.task}, ${i.progress} percent done.`;
+      return `${n} is working on ${i.task}.`;
   }
 }
 /** Screen line per person: everything we know. */
@@ -267,7 +267,7 @@ function teamQuestion(interns: Intern[], t: string): Reply | null {
     const count = `${xs.length} of ${tasked.length} ${xs.length === 1 ? one : many}.`;
     return {
       kind: "answer",
-      text: `${count} ${xs.map((i) => `${i.name}: ${i.task}, ${i.progress}%, ${dueText(i)}`).join(". ")}.`,
+      text: `${count} ${xs.map((i) => `${i.name}: ${i.task}, ${dueText(i)}`).join(". ")}.`,
       speak: [count, ...pairs(xs.map((i) => personLine(i, interns)))],
       offer: nextOffer(),
       chips: [...xs.slice(0, 2).map((i) => howIs(i, interns)), "Brief me on everyone"],
@@ -320,8 +320,6 @@ function behind(interns: Intern[]): Reply {
     return { kind: "answer", text: "Nobody is behind. Everyone is on track.", chips: ["Team status", ...interns.slice(0, 2).map((i) => howIs(i, interns))] };
   }
   const count = late.length === 1 ? "One person is" : `${late.length} people are`;
-  const list = late.map((i) => `${i.name} is ${STATUS_LABEL[i.status].toLowerCase()}`);
-  const spokenList = list.length > 1 ? `${list.slice(0, -1).join(", ")} and ${list.at(-1)}` : list[0];
   // Suggest the most useful next step: move an overdue task to someone with room, else details.
   const overdue = late.find((i) => i.status === "overdue");
   const free = overdue && freeIntern(interns, overdue.id);
@@ -331,8 +329,8 @@ function behind(interns: Intern[]): Reply {
     : { ask: `Want the details on ${short(focus, interns)}?`, run: `how is ${focus.name} doing` };
   return {
     kind: "answer",
-    text: `${count} behind. ${late.map((i) => `${i.name} is ${STATUS_LABEL[i.status].toLowerCase()} on ${i.task}`).join(". ")}.`,
-    speak: `${count} behind. ${spokenList}.`,
+    text: `${count} behind. ${late.map((i) => `${i.name} is ${STATUS_LABEL[i.status].toLowerCase()} on ${i.task}${i.status === "blocked" && i.update ? ` (“${i.update}”)` : ""}`).join(". ")}.`,
+    speak: [`${count} behind.`, ...late.map((i) => personLine(i, interns))],
     offer,
     about: late.length === 1 ? late[0].id : undefined,
     chips: [...late.slice(0, 2).map((i) => howIs(i, interns)), "Team status"],

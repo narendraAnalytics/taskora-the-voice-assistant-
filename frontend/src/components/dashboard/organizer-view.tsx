@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PartyPopper } from "lucide-react";
+import { MessageSquareText, PartyPopper } from "lucide-react";
 import { getInvites } from "@/app/dashboard/actions";
-import { getTasks, reassignTask } from "@/app/dashboard/task-actions";
-import { fmtDue, type TaskView } from "@/lib/task-types";
+import { getStandups, getTasks, reassignTask } from "@/app/dashboard/task-actions";
+import { fmtDue, type StandupView, type TaskView } from "@/lib/task-types";
 import { StatCards } from "@/components/dashboard/stat-cards";
 import { STATUS_LABEL, type Intern, type Status } from "@/lib/demo-data";
 import type { Invite } from "@/app/dashboard/actions";
@@ -53,13 +53,14 @@ function mainTask(list: TaskView[]) {
 }
 
 /** Interns on the batch (joined or invited), each with their main task from Neon. */
-function fromInvites(invites: Invite[], tasks: TaskView[]): Intern[] {
+function fromInvites(invites: Invite[], tasks: TaskView[], notes: StandupView[]): Intern[] {
   return invites
     .filter((i) => i.status === "joined" || i.status === "invited")
     .map((i) => {
       const full = i.name ?? i.email;
       const mine = tasks.filter((t) => t.inviteId === i.id);
       const t = mainTask(mine);
+      const note = t ? notes.find((n) => n.taskId === t.id) : undefined; // newest first
       return {
         id: i.id,
         name: full,
@@ -68,8 +69,8 @@ function fromInvites(invites: Invite[], tasks: TaskView[]): Intern[] {
         status: t ? t.status : ("todo" as Status),
         progress: t ? t.progress : 0,
         due: t?.dueDate ? fmtDue(t.dueDate) : "—",
-        update: "",
-        updatedAt: "",
+        update: note?.text ?? "",
+        updatedAt: note ? ago(note.createdAt) : "",
         taskId: t?.id,
         dueDate: t?.dueDate ?? null,
         more: Math.max(0, mine.length - 1),
@@ -80,16 +81,28 @@ function fromInvites(invites: Invite[], tasks: TaskView[]): Intern[] {
     });
 }
 
-export function OrganizerView({ invites, tasks: firstTasks }: { name?: string; invites: Invite[]; tasks: TaskView[] }) {
+export function OrganizerView({ invites, tasks: firstTasks, standups: firstStandups }: { name?: string; invites: Invite[]; tasks: TaskView[]; standups: StandupView[] }) {
   const [list, setList] = useState(invites);
   const [taskList, setTaskList] = useState(firstTasks);
   // The board is always derived from the real invites and tasks, so it follows every change.
-  const interns = useMemo(() => fromInvites(list, taskList), [list, taskList]);
+  const [standups, setStandups] = useState(firstStandups);
+  const interns = useMemo(() => fromInvites(list, taskList, standups), [list, taskList, standups]);
+  // Updates that arrived while this page was open, for the "just posted an update" banner.
+  const [postedNow, setPostedNow] = useState<string[]>([]);
+  const seenStandups = useRef(new Set(firstStandups.map((s) => s.id)));
   const reduce = useReducedMotion();
 
   const refreshTasks = useCallback(async () => {
-    const next = await getTasks().catch(() => null);
+    const [next, notes] = await Promise.all([getTasks().catch(() => null), getStandups().catch(() => null)]);
     if (next) setTaskList((cur) => (JSON.stringify(cur) === JSON.stringify(next) ? cur : next));
+    if (notes) {
+      const fresh = notes.filter((s) => !seenStandups.current.has(s.id));
+      if (fresh.length) {
+        fresh.forEach((s) => seenStandups.current.add(s.id));
+        setPostedNow([...new Set(fresh.map((s) => s.internName))]);
+      }
+      setStandups((cur) => (JSON.stringify(cur) === JSON.stringify(notes) ? cur : notes));
+    }
   }, []);
 
   /* Move an intern's board task to someone else (saved in Neon, then the board reloads). */
@@ -123,6 +136,11 @@ export function OrganizerView({ invites, tasks: firstTasks }: { name?: string; i
     };
   }, [refreshTasks]);
   useEffect(() => {
+    if (!postedNow.length) return;
+    const t = window.setTimeout(() => setPostedNow([]), 8000);
+    return () => window.clearTimeout(t);
+  }, [postedNow]);
+  useEffect(() => {
     if (!joinedNow.length) return;
     const t = window.setTimeout(() => setJoinedNow([]), 8000);
     return () => window.clearTimeout(t);
@@ -130,7 +148,6 @@ export function OrganizerView({ invites, tasks: firstTasks }: { name?: string; i
 
   const count = (s: Status) => interns.filter((i) => i.status === s).length;
 
-  const feed = interns.filter((i) => i.update).sort((a, b) => (a.updatedAt === "Just now" ? -1 : b.updatedAt === "Just now" ? 1 : 0));
 
   return (
     <Shell name="Team" role="organizer" title="Organizer dashboard" subtitle="Here is your intern batch today." action={<InviteDialog invites={list} onChange={setList} />}>
@@ -146,6 +163,22 @@ export function OrganizerView({ invites, tasks: firstTasks }: { name?: string; i
             <PartyPopper className="size-6 shrink-0" aria-hidden />
             <p className="font-note text-lg">
               {joinedNow.length === 1 ? joinedNow[0] : joinedNow.slice(0, -1).join(", ") + " and " + joinedNow.at(-1)} just joined your batch!
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {postedNow.length > 0 && (
+          <motion.div
+            role="status"
+            initial={reduce ? false : { opacity: 0, y: -14, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="mb-5 flex items-center gap-3 rounded-2xl bg-haldi px-5 py-3.5 font-semibold text-neem ring-2 ring-neem/25 shadow-[0_4px_0_rgba(23,63,48,0.2)]"
+          >
+            <MessageSquareText className="size-6 shrink-0" aria-hidden />
+            <p className="font-note text-lg">
+              {postedNow.length === 1 ? postedNow[0] : postedNow.slice(0, -1).join(", ") + " and " + postedNow.at(-1)} just posted an update.
             </p>
           </motion.div>
         )}
@@ -254,30 +287,36 @@ export function OrganizerView({ invites, tasks: firstTasks }: { name?: string; i
 
         <PaperCard as="section" i={6} tilt={-2} className={cn(card, "lg:col-span-5")}>
           <h2 className="font-hand text-4xl font-bold leading-none">Standups</h2>
-          <p className="font-note mt-1 text-sm text-moss">What interns said out loud</p>
-          {feed.length === 0 && (
+          <p className="font-note mt-1 text-sm text-moss">What interns told you about their tasks</p>
+          {standups.length === 0 && (
             <p className="font-note mt-5 rounded-2xl bg-paper px-4 py-6 text-center text-moss">
-              Nothing yet. Voice standups will show up here.
+              Nothing yet. When an intern writes an update on a task, it shows up here.
             </p>
           )}
           <ul className="mt-5 space-y-4">
-            {feed.slice(0, 5).map((i, n) => (
+            {standups.slice(0, 8).map((s, n) => (
               <motion.li
-                key={i.id}
+                key={s.id}
                 layout={!reduce}
                 initial={reduce ? false : { opacity: 0, y: 16, rotate: n % 2 ? 2 : -2 }}
                 animate={{ opacity: 1, y: 0, rotate: n % 2 ? 0.6 : -0.6 }}
                 whileHover={reduce ? undefined : { rotate: 0, y: -3, scale: 1.015 }}
                 transition={{ type: "spring", stiffness: 200, damping: 16, delay: 0.7 + n * 0.08 }}
-                className="relative rounded-2xl bg-paper p-3.5 shadow-[0_3px_0_#173f3014]"
+                className={cn("relative rounded-2xl p-3.5 shadow-[0_3px_0_#173f3014]", s.status === "blocked" ? "bg-kumkum text-paper" : "bg-paper")}
               >
                 {n === 0 && <Tape className="-top-3 right-8" />}
                 <div className="flex items-center gap-2.5">
-                  <Avatar name={i.name} className="size-8 text-xs" />
-                  <span className="text-sm font-bold">{i.name}</span>
-                  <span className="ml-auto text-xs text-moss">{i.updatedAt}</span>
+                  <Avatar name={s.internName} className="size-8 text-xs" />
+                  <span className="truncate text-sm font-bold">{s.internName}</span>
+                  <span suppressHydrationWarning className={cn("ml-auto shrink-0 text-xs", s.status === "blocked" ? "text-paper/80" : "text-moss")}>
+                    {ago(s.createdAt)}
+                  </span>
                 </div>
-                <p className="font-note mt-2 text-[1.02rem] leading-snug">“{i.update}”</p>
+                <p className={cn("mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold", s.status === "blocked" ? "text-paper" : "text-moss")}>
+                  <span className="truncate">{s.taskTitle}</span>
+                  <StatusChip status={s.status} />
+                </p>
+                <p className="font-note mt-2 text-[1.02rem] leading-snug">“{s.text}”</p>
               </motion.li>
             ))}
           </ul>

@@ -1,16 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { CalendarDays, Check, ClipboardList, GraduationCap, Languages, Mic, School, Sparkles, Square } from "lucide-react";
-import { fmtDue, type TaskView } from "@/lib/task-types";
-import { useSpeech } from "@/lib/use-speech";
+import { useRef, useState } from "react";
+import { CalendarDays, Check, ClipboardList, GraduationCap, Languages, MessageSquarePlus, School, Send, Sparkles } from "lucide-react";
+import { postTaskUpdate } from "@/app/me/actions";
+import { fmtDue, guessStatus, UPDATE_STATUSES, type TaskView, type UpdateStatus } from "@/lib/task-types";
+import { STATUS_LABEL } from "@/lib/demo-data";
 import { StatusChip } from "@/components/dashboard/status-chip";
 import { Shell } from "@/components/dashboard/shell";
 import { motion, useReducedMotion } from "framer-motion";
 import { PaperCard, Tape } from "@/components/dashboard/motion";
 import { cn } from "@/lib/utils";
 
-const MAX = 20;
+const MAX = 400;
 
 const CONFETTI = ["#f2b33d", "#e8622a", "#7dbe8f", "#fce7b2", "#b23a48"];
 
@@ -36,17 +37,6 @@ function Confetti() {
   );
 }
 const card = "rounded-[2rem] bg-paper-deep/70 p-5 ring-1 ring-neem/10 backdrop-blur-sm sm:p-6";
-
-/** Split a spoken update into done / next / blocked using simple cue words (Gemini does this later). */
-function summarise(text: string) {
-  const parts = text.split(/(?<=[.!?])\s+|\band\b|,/i).map((p) => p.trim()).filter(Boolean);
-  const pick = (re: RegExp) => parts.filter((p) => re.test(p));
-  return {
-    done: pick(/\b(done|finished|completed|shipped|fixed)\b/i),
-    next: pick(/\b(next|will|going to|tomorrow|plan)\b/i),
-    blocked: pick(/\b(blocked|stuck|waiting|can't|cannot|need help)\b/i),
-  };
-}
 
 export type InternProfile = {
   position: string | null;
@@ -96,141 +86,249 @@ function Placement({ p }: { p: InternProfile }) {
   );
 }
 
-/** `tasks` are this intern's own, loaded on the server from their own invite. Read-only for now. */
-export function InternView({ name, profile, tasks = [] }: { name: string; profile?: InternProfile | null; tasks?: TaskView[] }) {
+/** How each status looks as a choice button (palette only: no white, black or blue). */
+const STATUS_TONE: Record<UpdateStatus, string> = {
+  todo: "bg-sage text-neem",
+  progress: "bg-haldi text-neem",
+  blocked: "bg-kumkum text-paper",
+  done: "bg-tulsi text-neem",
+};
+
+/** Starter sentences that fill the box and set the status, for interns who do not know what to write. */
+const QUICK: { label: string; text: string; status: UpdateStatus }[] = [
+  { label: "Started", text: "I've started working on this.", status: "progress" },
+  { label: "Blocked", text: "I'm blocked: ", status: "blocked" },
+  { label: "Finished", text: "I've finished this and it's ready for review.", status: "done" },
+];
+
+/** A task's status as a choice: an overdue task is still "in progress" until the intern says otherwise. */
+const choiceFor = (t: TaskView): UpdateStatus => (t.status === "overdue" ? "progress" : t.status);
+
+type Sent = { id: number; task: string; status: UpdateStatus; text: string };
+
+/** `tasks` are this intern's own, loaded on the server from their own invite. */
+export function InternView({ name, profile, tasks: firstTasks = [] }: { name: string; profile?: InternProfile | null; tasks?: TaskView[] }) {
   const reduce = useReducedMotion();
-  const [update, setUpdate] = useState<string | null>(null);
+  const [tasks, setTasks] = useState(firstTasks);
+  const open = tasks.filter((t) => t.status !== "done");
+  const [taskId, setTaskId] = useState<string | null>((open[0] ?? tasks[0])?.id ?? null);
+  const [text, setText] = useState("");
+  const [status, setStatus] = useState<UpdateStatus>(() => ((open[0] ?? tasks[0]) ? choiceFor(open[0] ?? tasks[0]) : "progress"));
+  const [touched, setTouched] = useState(false); // the intern picked a status themselves
+  const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
-  const [draft, setDraft] = useState("");
+  const [error, setError] = useState("");
+  const [history, setHistory] = useState<Sent[]>([]);
+  const composer = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
 
-  const { supported, listening, transcript, seconds, start, stop } = useSpeech((t) => {
-    setUpdate(t);
-    setSent(false);
-  }, MAX);
-
-  const text = update ?? "";
-  const sum = text ? summarise(text) : null;
-  const ring = Math.min(seconds / MAX, 1);
+  const task = tasks.find((t) => t.id === taskId) ?? null;
   const done = tasks.filter((t) => t.status === "done").length;
+  const guessed = !touched && text.trim() ? guessStatus(text) : null;
 
+  const pickTask = (t: TaskView, focus = false) => {
+    setTaskId(t.id);
+    setStatus(choiceFor(t));
+    setTouched(false);
+    setSent(false);
+    setError("");
+    if (focus) {
+      composer.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
+      window.setTimeout(() => box.current?.focus({ preventScroll: true }), 350);
+    }
+  };
+
+  const onText = (v: string) => {
+    setText(v.slice(0, MAX));
+    setSent(false);
+    if (!touched) {
+      const g = guessStatus(v);
+      if (g) setStatus(g);
+    }
+  };
+
+  const quick = (q: (typeof QUICK)[number]) => {
+    setText(q.text);
+    setStatus(q.status);
+    setTouched(true);
+    setSent(false);
+    window.setTimeout(() => {
+      const el = box.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    }, 0);
+  };
+
+  const send = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!task || sending) return;
+    if (text.trim().length < 2) return setError("Write a few words about the task.");
+    setError("");
+    setSending(true);
+    const r = await postTaskUpdate({ taskId: task.id, text: text.trim(), status }).catch(() => ({ ok: false as const, error: "Could not send. Check your connection and try again." }));
+    setSending(false);
+    if (!r.ok) return setError(r.error);
+    setTasks((l) => l.map((t) => (t.id === r.task.id ? r.task : t)));
+    setHistory((h) => [{ id: Date.now(), task: task.title, status, text: text.trim() }, ...h].slice(0, 4));
+    setText("");
+    setTouched(false);
+    setStatus(choiceFor(r.task));
+    setSent(true);
+  };
 
   return (
-    <Shell name={name} role="intern" title="Intern workspace" subtitle="Give your 20-second standup. Taskora does the rest.">
+    <Shell name={name} role="intern" title="Intern workspace" subtitle="Tell your organizer how your tasks are going.">
       <div className="grid gap-5 lg:grid-cols-12">
         <PaperCard as="section" i={0} tilt={-1.5} className="relative overflow-hidden rounded-[2rem] bg-neem p-6 text-paper sm:p-8 lg:col-span-7">
           <div aria-hidden className="pointer-events-none absolute -left-20 -top-20 size-72 rounded-full bg-saffron/30 blur-3xl" />
-          <h2 className="font-hand relative text-4xl font-bold leading-none text-haldi">Today&apos;s standup</h2>
-          <p className="font-note relative mt-1.5 text-base text-sage">Say what you finished, what&apos;s next, and what is blocking you.</p>
-
-          <div className="relative mt-8 flex flex-col items-center">
-            <div className="relative grid size-44 place-items-center">
-              <svg viewBox="0 0 100 100" className="absolute inset-0 -rotate-90" aria-hidden>
-                <circle cx="50" cy="50" r="46" fill="none" stroke="#24543f" strokeWidth="5" />
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="46"
-                  fill="none"
-                  stroke="#f2b33d"
-                  strokeWidth="5"
-                  strokeLinecap="round"
-                  strokeDasharray={2 * Math.PI * 46}
-                  strokeDashoffset={2 * Math.PI * 46 * (1 - ring)}
-                  className="transition-[stroke-dashoffset] duration-300"
-                />
-              </svg>
-              <button
-                type="button"
-                onClick={listening ? stop : () => start()}
-                disabled={!supported}
-                aria-label={listening ? "Stop recording" : "Start your standup"}
-                className={cn(
-                  "relative grid size-32 place-items-center rounded-full text-neem shadow-[0_6px_0_#11332a] transition-transform active:translate-y-1 active:shadow-none disabled:opacity-40",
-                  listening ? "bg-kumkum text-paper" : "bg-saffron hover:scale-105",
-                )}
-              >
-                {listening && <span aria-hidden className="absolute inset-0 animate-ping rounded-full bg-kumkum/50" />}
-                {listening ? <Square className="relative size-9 fill-current" aria-hidden /> : <Mic className="relative size-12" aria-hidden />}
-              </button>
+          <div aria-hidden className="pointer-events-none absolute -bottom-24 -right-16 size-64 rounded-full bg-tulsi/20 blur-3xl" />
+          <div ref={composer} className="relative scroll-mt-24">
+            <div className="flex items-center gap-3">
+              <span className="grid size-11 shrink-0 place-items-center rounded-full bg-haldi text-neem">
+                <MessageSquarePlus className="size-5" aria-hidden />
+              </span>
+              <h2 className="font-hand text-4xl font-bold leading-none text-haldi">Tell your organizer</h2>
             </div>
-            <p className="font-hand mt-3 text-3xl font-bold tabular-nums text-haldi">
-              {listening ? `${MAX - seconds}s left` : "Tap and talk"}
-            </p>
-            {!supported && <p className="mt-1 text-sm text-sage">Voice needs Chrome or Edge. You can type below instead.</p>}
-          </div>
+            <p className="font-note mt-2 text-base text-sage">Started a task? Hit a blocker? Write it here and your organizer sees it right away.</p>
 
-          {(listening || text) && (
-            <p className="font-note relative mt-6 rounded-2xl bg-neem-soft p-4 text-lg leading-snug">
-              “{listening ? transcript || "Listening…" : text}”
-            </p>
-          )}
-
-          {!supported && !text && (
-            <form
-              className="relative mt-5 flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (draft.trim()) setUpdate(draft.trim());
-              }}
-            >
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                aria-label="Type your standup"
-                placeholder="Login page is done, next is tests…"
-                className="h-12 flex-1 rounded-full bg-neem-soft px-5 text-paper placeholder:text-sage focus:outline-none focus-visible:ring-2 focus-visible:ring-haldi"
-              />
-              <button type="submit" className="rounded-full bg-haldi px-5 font-bold text-neem">
-                Use
-              </button>
-            </form>
-          )}
-
-          {sum && !listening && (
-            <div className="relative mt-5 space-y-3">
-              {(
-                [
-                  ["Done", sum.done, "bg-tulsi text-neem"],
-                  ["Next", sum.next, "bg-haldi text-neem"],
-                  ["Blocked", sum.blocked, "bg-kumkum text-paper"],
-                ] as const
-              ).map(([label, items, tone]) =>
-                items.length ? (
-                  <div key={label} className="flex items-start gap-2.5">
-                    <span className={cn("mt-0.5 rounded-full px-2.5 py-0.5 text-xs font-bold", tone)}>{label}</span>
-                    <p className="text-[0.98rem] leading-snug">{items.join(". ")}</p>
-                  </div>
-                ) : null,
-              )}
-              <div className="flex gap-2 pt-1">
-                <button
-                  type="button"
-                  disabled={sent}
-                  onClick={() => setSent(true)}
-                  className="relative inline-flex items-center gap-2 rounded-full bg-saffron px-5 py-2.5 font-bold text-neem transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-[#ef7740] active:scale-95 disabled:bg-tulsi"
-                >
-                  {sent && !reduce && <Confetti />}
-                  {sent ? (
-                    <>
-                      <Check className="size-4" aria-hidden /> Sent to your organizer
-                    </>
-                  ) : (
-                    "Send update"
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUpdate(null);
-                    setSent(false);
-                  }}
-                  className="rounded-full px-5 py-2.5 font-bold ring-2 ring-paper/60 hover:bg-neem-soft"
-                >
-                  Record again
-                </button>
+            {tasks.length === 0 ? (
+              <div className="mt-6 rounded-2xl bg-neem-soft px-5 py-8 text-center">
+                <ClipboardList className="mx-auto size-8 text-haldi" aria-hidden />
+                <p className="font-note mt-3 text-lg">No tasks to update yet.</p>
+                <p className="mt-1 text-sm text-sage">When your organizer gives you a task, you can write your updates here.</p>
               </div>
-            </div>
-          )}
+            ) : (
+              <form onSubmit={send} className="mt-6 space-y-5">
+                {/* 1. Which task */}
+                <fieldset>
+                  <legend className="mb-2 text-sm font-bold text-sage">1. Which task?</legend>
+                  <div className="flex flex-wrap gap-2">
+                    {tasks.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => pickTask(t)}
+                        aria-pressed={t.id === taskId}
+                        className={cn(
+                          "max-w-full rounded-2xl px-4 py-2 text-left transition-[background-color,color,transform] active:scale-95",
+                          t.id === taskId ? "bg-haldi text-neem" : "bg-neem-soft text-paper hover:bg-neem-soft/70",
+                        )}
+                      >
+                        <span className="block truncate text-sm font-bold">{t.title}</span>
+                        <span className={cn("block text-xs", t.id === taskId ? "text-neem/80" : "text-sage")}>Due {fmtDue(t.dueDate)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+
+                {/* 2. The message */}
+                <div>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <label htmlFor="update-text" className="text-sm font-bold text-sage">
+                      2. What&apos;s the update?
+                    </label>
+                    <div className="flex gap-1.5" aria-label="Quick starters">
+                      {QUICK.map((q) => (
+                        <button
+                          key={q.label}
+                          type="button"
+                          onClick={() => quick(q)}
+                          className="rounded-full bg-neem-soft px-3 py-1 text-xs font-bold text-paper transition-[background-color,color,transform] hover:-translate-y-0.5 hover:bg-haldi hover:text-neem active:scale-95"
+                        >
+                          {q.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <textarea
+                      id="update-text"
+                      ref={box}
+                      value={text}
+                      onChange={(e) => onText(e.target.value)}
+                      rows={4}
+                      maxLength={MAX}
+                      placeholder={task ? `e.g. I started on "${task.title}" and the first page is done. I need the logo file to continue.` : "Write your update…"}
+                      className="font-note w-full resize-none rounded-2xl bg-neem-soft p-4 pb-8 text-[1.05rem] leading-snug text-paper placeholder:text-sage/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-haldi"
+                    />
+                    <span aria-hidden className={cn("pointer-events-none absolute bottom-2.5 right-4 text-xs tabular-nums", text.length > MAX - 40 ? "text-haldi" : "text-sage")}>
+                      {text.length}/{MAX}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 3. Status */}
+                <fieldset>
+                  <legend className="mb-2 flex items-center gap-2 text-sm font-bold text-sage">
+                    3. Where is it now?
+                    {guessed && <span className="rounded-full bg-neem-soft px-2 py-0.5 text-xs font-semibold text-haldi">Taskora picked this, change it if wrong</span>}
+                  </legend>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Task status">
+                    {UPDATE_STATUSES.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        role="radio"
+                        aria-checked={status === s}
+                        onClick={() => {
+                          setStatus(s);
+                          setTouched(true);
+                        }}
+                        className={cn(
+                          "rounded-full px-3 py-2 text-sm font-bold transition-[box-shadow,opacity,transform] active:scale-95",
+                          STATUS_TONE[s],
+                          status === s ? "scale-[1.04] opacity-100 ring-2 ring-paper ring-offset-2 ring-offset-neem" : "opacity-55 hover:opacity-90",
+                        )}
+                      >
+                        {STATUS_LABEL[s]}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+
+                {error && (
+                  <p role="alert" className="rounded-xl bg-kumkum px-4 py-2.5 text-sm font-semibold text-paper">
+                    {error}
+                  </p>
+                )}
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="submit"
+                    disabled={sending || !text.trim()}
+                    className="relative inline-flex items-center gap-2 rounded-full bg-saffron px-6 py-3 text-lg font-bold text-neem shadow-[0_4px_0_#11332a] transition-[transform,box-shadow] hover:-translate-y-0.5 active:translate-y-1 active:shadow-none disabled:opacity-50 disabled:hover:translate-y-0"
+                  >
+                    {sent && !reduce && <Confetti />}
+                    {sending ? "Sending…" : "Send to organizer"}
+                    <Send className="size-5" aria-hidden />
+                  </button>
+                  {sent && (
+                    <motion.p role="status" initial={reduce ? false : { opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="inline-flex items-center gap-1.5 font-semibold text-tulsi">
+                      <Check className="size-5" aria-hidden /> Sent. Your organizer can see it now.
+                    </motion.p>
+                  )}
+                </div>
+              </form>
+            )}
+
+            {history.length > 0 && (
+              <div className="mt-7">
+                <h3 className="font-note text-lg font-bold text-haldi">Sent just now</h3>
+                <ul className="mt-2 space-y-2">
+                  {history.map((h) => (
+                    <motion.li key={h.id} initial={reduce ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl bg-neem-soft p-3.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-bold">{h.task}</span>
+                        <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold", STATUS_TONE[h.status])}>{STATUS_LABEL[h.status]}</span>
+                      </div>
+                      <p className="font-note mt-1 text-[0.98rem] leading-snug text-sage">“{h.text}”</p>
+                    </motion.li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         </PaperCard>
 
         <div className="flex flex-col gap-5 lg:col-span-5">
@@ -254,13 +352,13 @@ export function InternView({ name, profile, tasks = [] }: { name: string; profil
               </div>
             )}
             <ul className="mt-4 space-y-3">
-              {tasks.map((t) => (
+              {tasks.map((t, n) => (
                 <motion.li
                   key={t.id}
                   initial={reduce ? false : { opacity: 0, y: 14, rotate: -1.5 }}
                   animate={{ opacity: 1, y: 0, rotate: 0 }}
                   whileHover={reduce ? undefined : { y: -3 }}
-                  transition={{ type: "spring", stiffness: 220, damping: 18, delay: 0.45 + tasks.indexOf(t) * 0.08 }}
+                  transition={{ type: "spring", stiffness: 220, damping: 18, delay: 0.45 + n * 0.08 }}
                   className={cn("rounded-2xl bg-paper p-4 shadow-[0_3px_0_#173f3014] transition-opacity", t.status === "done" && "opacity-75")}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -268,6 +366,14 @@ export function InternView({ name, profile, tasks = [] }: { name: string; profil
                     <StatusChip status={t.status} />
                   </div>
                   <p className="mt-1 text-xs font-semibold text-moss">Due {fmtDue(t.dueDate)}</p>
+                  {t.note && <p className="font-note mt-2 rounded-xl bg-paper-deep/70 px-3 py-2 text-sm leading-snug">“{t.note}”</p>}
+                  <button
+                    type="button"
+                    onClick={() => pickTask(t, true)}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-bold ring-2 ring-neem transition-colors hover:bg-haldi"
+                  >
+                    <MessageSquarePlus className="size-4" aria-hidden /> Write an update
+                  </button>
                 </motion.li>
               ))}
             </ul>
@@ -275,7 +381,7 @@ export function InternView({ name, profile, tasks = [] }: { name: string; profil
 
           <PaperCard as="section" i={3} tilt={2} className="relative rounded-[2rem] bg-haldi p-5 sm:p-6"><Tape className="-top-3 left-10" />
             <h2 className="font-hand text-4xl font-bold leading-none">Your streak</h2>
-            <div className="mt-4 flex gap-2" aria-label="Standups this week">
+            <div className="mt-4 flex gap-2" aria-label="Updates this week">
               {["M", "T", "W", "T", "F"].map((d, i) => (
                 <div key={i} className="flex flex-1 flex-col items-center gap-1.5">
                   <motion.span
@@ -289,7 +395,7 @@ export function InternView({ name, profile, tasks = [] }: { name: string; profil
                 </div>
               ))}
             </div>
-            <p className="font-note mt-4 text-base">Give your first standup to start your streak.</p>
+            <p className="font-note mt-4 text-base">Send your first update to start your streak.</p>
           </PaperCard>
         </div>
       </div>

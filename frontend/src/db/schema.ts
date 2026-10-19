@@ -79,7 +79,25 @@ export const taskEvents = pgTable("task_events", {
     .notNull()
     .references(() => tasks.id, { onDelete: "cascade" }),
   actorId: text("actor_id"),
-  kind: text("kind").$type<"created" | "reassigned" | "emailed">().notNull(),
+  kind: text("kind").$type<"created" | "reassigned" | "emailed" | "status_changed" | "note">().notNull(),
   data: jsonb("data").$type<Record<string, unknown>>().notNull().default(sql`'{}'`),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** What an intern told their organizer about a task ("started", "blocked: need the API key"). */
+export const standups = pgTable("standups", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  taskId: uuid("task_id")
+    .notNull()
+    .references(() => tasks.id, { onDelete: "cascade" }),
+  inviteId: uuid("invite_id")
+    .notNull()
+    .references(() => internInvites.id, { onDelete: "cascade" }),
+  organizerId: text("organizer_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  /** The task's status after this update. */
+  status: text("status").$type<"todo" | "progress" | "blocked" | "done">().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

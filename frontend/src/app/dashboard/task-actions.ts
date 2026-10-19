@@ -7,8 +7,8 @@ import { internInvites, taskEvents, tasks } from "@/db/schema";
 import { BASE_URL } from "@/lib/base-url";
 import { sendTaskEmail } from "@/lib/email";
 import { requireOrganizer } from "@/lib/session";
-import { fmtDue, PAST_DATE_ERROR, todayIST, type TaskResult, type TaskView } from "@/lib/task-types";
-import { listTasksForOrganizer, toView } from "@/lib/tasks";
+import { fmtDue, PAST_DATE_ERROR, todayIST, type StandupView, type TaskResult, type TaskView } from "@/lib/task-types";
+import { listStandups, listTasksForOrganizer, toView } from "@/lib/tasks";
 
 /** An intern on this organizer's batch who can still receive work (invited or joined). */
 async function ownInvite(organizerId: string, inviteId: string) {
@@ -78,4 +78,10 @@ export async function emailTask(taskId: string): Promise<{ ok: true } | { ok: fa
   await db.update(tasks).set({ emailSentAt: new Date() }).where(eq(tasks.id, task.id));
   await db.insert(taskEvents).values({ taskId: task.id, actorId: s.userId, kind: "emailed", data: { to: invite.email } });
   return { ok: true };
+}
+
+/** The organizer's newest intern updates for the Standups feed. */
+export async function getStandups(): Promise<StandupView[]> {
+  const s = await requireOrganizer();
+  return listStandups(s.userId);
 }
