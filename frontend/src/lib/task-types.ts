@@ -51,12 +51,3 @@ export type StandupView = {
 
 export const UPDATE_STATUSES = ["todo", "progress", "blocked", "done"] as const;
 export type UpdateStatus = (typeof UPDATE_STATUSES)[number];
-
-/** Best guess of the status an intern's sentence means. They can change it before sending. */
-export function guessStatus(text: string): UpdateStatus | null {
-  const t = text.toLowerCase();
-  if (/\b(blocked|stuck|waiting (for|on)|cant|cannot|can't|unable|need help|need access|issue|problem)\b/.test(t)) return "blocked";
-  if (/\b(done|finished|completed|complete|shipped|submitted|delivered)\b/.test(t)) return "done";
-  if (/\b(start|started|starting|begin|began|working|working on|in progress|doing|continue|continuing)\b/.test(t)) return "progress";
-  return null;
-}

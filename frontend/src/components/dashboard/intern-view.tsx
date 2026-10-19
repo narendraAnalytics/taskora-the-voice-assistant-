@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { CalendarDays, Check, ClipboardList, GraduationCap, Languages, MessageSquarePlus, School, Send, Sparkles } from "lucide-react";
 import { postTaskUpdate } from "@/app/me/actions";
-import { fmtDue, guessStatus, UPDATE_STATUSES, type TaskView, type UpdateStatus } from "@/lib/task-types";
+import { fmtDue, UPDATE_STATUSES, type TaskView, type UpdateStatus } from "@/lib/task-types";
 import { STATUS_LABEL } from "@/lib/demo-data";
 import { StatusChip } from "@/components/dashboard/status-chip";
 import { Shell } from "@/components/dashboard/shell";
@@ -101,8 +101,11 @@ const QUICK: { label: string; text: string; status: UpdateStatus }[] = [
   { label: "Finished", text: "I've finished this and it's ready for review.", status: "done" },
 ];
 
-/** A task's status as a choice: an overdue task is still "in progress" until the intern says otherwise. */
-const choiceFor = (t: TaskView): UpdateStatus => (t.status === "overdue" ? "progress" : t.status);
+/**
+ * The status that is pre-selected when an intern opens a task. Only the intern changes a status, so nothing is
+ * guessed from their words: a task still to do (or overdue) starts at "In progress", the others keep their status.
+ */
+const choiceFor = (t: TaskView): UpdateStatus => (t.status === "todo" || t.status === "overdue" ? "progress" : t.status);
 
 type Sent = { id: number; task: string; status: UpdateStatus; text: string };
 
@@ -114,7 +117,6 @@ export function InternView({ name, profile, tasks: firstTasks = [] }: { name: st
   const [taskId, setTaskId] = useState<string | null>((open[0] ?? tasks[0])?.id ?? null);
   const [text, setText] = useState("");
   const [status, setStatus] = useState<UpdateStatus>(() => ((open[0] ?? tasks[0]) ? choiceFor(open[0] ?? tasks[0]) : "progress"));
-  const [touched, setTouched] = useState(false); // the intern picked a status themselves
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
@@ -124,12 +126,10 @@ export function InternView({ name, profile, tasks: firstTasks = [] }: { name: st
 
   const task = tasks.find((t) => t.id === taskId) ?? null;
   const done = tasks.filter((t) => t.status === "done").length;
-  const guessed = !touched && text.trim() ? guessStatus(text) : null;
 
   const pickTask = (t: TaskView, focus = false) => {
     setTaskId(t.id);
     setStatus(choiceFor(t));
-    setTouched(false);
     setSent(false);
     setError("");
     if (focus) {
@@ -141,16 +141,11 @@ export function InternView({ name, profile, tasks: firstTasks = [] }: { name: st
   const onText = (v: string) => {
     setText(v.slice(0, MAX));
     setSent(false);
-    if (!touched) {
-      const g = guessStatus(v);
-      if (g) setStatus(g);
-    }
   };
 
   const quick = (q: (typeof QUICK)[number]) => {
     setText(q.text);
     setStatus(q.status);
-    setTouched(true);
     setSent(false);
     window.setTimeout(() => {
       const el = box.current;
@@ -172,7 +167,6 @@ export function InternView({ name, profile, tasks: firstTasks = [] }: { name: st
     setTasks((l) => l.map((t) => (t.id === r.task.id ? r.task : t)));
     setHistory((h) => [{ id: Date.now(), task: task.title, status, text: text.trim() }, ...h].slice(0, 4));
     setText("");
-    setTouched(false);
     setStatus(choiceFor(r.task));
     setSent(true);
   };
@@ -262,7 +256,7 @@ export function InternView({ name, profile, tasks: firstTasks = [] }: { name: st
                 <fieldset>
                   <legend className="mb-2 flex items-center gap-2 text-sm font-bold text-sage">
                     3. Where is it now?
-                    {guessed && <span className="rounded-full bg-neem-soft px-2 py-0.5 text-xs font-semibold text-haldi">Taskora picked this, change it if wrong</span>}
+                    <span className="rounded-full bg-neem-soft px-2 py-0.5 text-xs font-semibold text-haldi">You choose this</span>
                   </legend>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Task status">
                     {UPDATE_STATUSES.map((s) => (
@@ -271,10 +265,7 @@ export function InternView({ name, profile, tasks: firstTasks = [] }: { name: st
                         type="button"
                         role="radio"
                         aria-checked={status === s}
-                        onClick={() => {
-                          setStatus(s);
-                          setTouched(true);
-                        }}
+                        onClick={() => setStatus(s)}
                         className={cn(
                           "rounded-full px-3 py-2 text-sm font-bold transition-[box-shadow,opacity,transform] active:scale-95",
                           STATUS_TONE[s],
