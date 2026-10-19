@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Mic, Square } from "lucide-react";
-import { MY_TASKS, STATUS_LABEL, type Status } from "@/lib/demo-data";
+import { CalendarDays, Check, ClipboardList, GraduationCap, Languages, Mic, School, Sparkles, Square } from "lucide-react";
+import { STATUS_LABEL, type MyTask, type Status } from "@/lib/demo-data";
 import { useSpeech } from "@/lib/use-speech";
 import { StatusChip } from "@/components/dashboard/status-chip";
 import { Shell } from "@/components/dashboard/shell";
@@ -48,8 +48,57 @@ function summarise(text: string) {
   };
 }
 
-export function InternView({ name }: { name: string }) {
-  const [tasks, setTasks] = useState(MY_TASKS);
+export type InternProfile = {
+  position: string | null;
+  college: string | null;
+  degree: string | null;
+  studyYear: string | null;
+  months: number | null;
+  startDate: string | null;
+  language: string | null;
+  skills: string[];
+};
+
+const fmtDate = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+
+/** The intern's own details, from the invite their organizer filled in. */
+function Placement({ p }: { p: InternProfile }) {
+  const study = [p.degree, p.studyYear].filter(Boolean).join(" · ");
+  const when = [p.months ? `${p.months} month${p.months > 1 ? "s" : ""}` : "", p.startDate ? `from ${fmtDate(p.startDate)}` : ""].filter(Boolean).join(" · ");
+  const rows: [typeof Sparkles, string][] = [];
+  if (p.position) rows.push([Sparkles, p.position]);
+  if (p.college) rows.push([School, p.college]);
+  if (study) rows.push([GraduationCap, study]);
+  if (when) rows.push([CalendarDays, when]);
+  if (p.language) rows.push([Languages, `Standups in ${p.language}`]);
+  if (!rows.length && !p.skills.length) return null;
+  return (
+    <PaperCard as="section" i={1} tilt={2} className={card}>
+      <h2 className="font-hand text-4xl font-bold leading-none">Your placement</h2>
+      <ul className="mt-4 space-y-2.5">
+        {rows.map(([Icon, text], k) => (
+          <li key={k} className="flex items-start gap-2.5">
+            <Icon className="mt-0.5 size-4 shrink-0 text-moss" aria-hidden />
+            <span className={cn(k === 0 && "font-bold")}>{text}</span>
+          </li>
+        ))}
+      </ul>
+      {p.skills.length > 0 && (
+        <div className="mt-4 flex flex-wrap gap-1.5" aria-label="Skills">
+          {p.skills.map((sk) => (
+            <span key={sk} className="rounded-full bg-tulsi px-2.5 py-1 text-xs font-bold">
+              {sk}
+            </span>
+          ))}
+        </div>
+      )}
+    </PaperCard>
+  );
+}
+
+export function InternView({ name, profile }: { name: string; profile?: InternProfile | null }) {
+  // No task table in Neon yet: an intern starts with none, and the organizer assigns them later.
+  const [tasks, setTasks] = useState<MyTask[]>([]);
   const reduce = useReducedMotion();
   const [update, setUpdate] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -188,13 +237,25 @@ export function InternView({ name }: { name: string }) {
         </PaperCard>
 
         <div className="flex flex-col gap-5 lg:col-span-5">
-          <PaperCard as="section" i={1} tilt={2} className={card}>
+          {profile && <Placement p={profile} />}
+          <PaperCard as="section" i={2} tilt={-2} className={card}>
             <div className="flex items-baseline justify-between">
               <h2 className="font-hand text-4xl font-bold leading-none">My tasks</h2>
-              <span className="font-note text-sm text-moss">
-                {done} of {tasks.length} done
-              </span>
+              {tasks.length > 0 && (
+                <span className="font-note text-sm text-moss">
+                  {done} of {tasks.length} done
+                </span>
+              )}
             </div>
+            {tasks.length === 0 && (
+              <div className="mt-4 flex flex-col items-center rounded-2xl bg-paper px-4 py-7 text-center">
+                <span className="grid size-12 place-items-center rounded-full bg-haldi ring-2 ring-neem/25">
+                  <ClipboardList className="size-6" aria-hidden />
+                </span>
+                <p className="font-note mt-3 text-lg">No tasks yet.</p>
+                <p className="mt-1 text-sm text-moss">When your organizer gives you a task, it will show up here.</p>
+              </div>
+            )}
             <ul className="mt-4 space-y-3">
               {tasks.map((t) => (
                 <motion.li
@@ -231,24 +292,23 @@ export function InternView({ name }: { name: string }) {
             </ul>
           </PaperCard>
 
-          <PaperCard as="section" i={2} tilt={-2.5} className="relative rounded-[2rem] bg-haldi p-5 sm:p-6"><Tape className="-top-3 left-10" />
+          <PaperCard as="section" i={3} tilt={2} className="relative rounded-[2rem] bg-haldi p-5 sm:p-6"><Tape className="-top-3 left-10" />
             <h2 className="font-hand text-4xl font-bold leading-none">Your streak</h2>
             <div className="mt-4 flex gap-2" aria-label="Standups this week">
               {["M", "T", "W", "T", "F"].map((d, i) => (
                 <div key={i} className="flex flex-1 flex-col items-center gap-1.5">
                   <motion.span
-                    className={cn("grid size-10 place-items-center rounded-full text-sm font-bold", i < 3 ? "bg-neem text-paper" : "bg-neem/15")}
+                    className="grid size-10 place-items-center rounded-full bg-neem/15 text-sm font-bold"
                     initial={reduce ? false : { scale: 0, rotate: -40 }}
                     animate={{ scale: 1, rotate: 0 }}
                     transition={{ type: "spring", stiffness: 320, damping: 12, delay: 0.7 + i * 0.1 }}
                   >
-                    {i < 3 ? <Check className="size-4" aria-hidden /> : null}
                   </motion.span>
                   <span className="text-xs font-semibold">{d}</span>
                 </div>
               ))}
             </div>
-            <p className="font-note mt-4 text-base">Three days in a row. Keep it going!</p>
+            <p className="font-note mt-4 text-base">Give your first standup to start your streak.</p>
           </PaperCard>
         </div>
       </div>

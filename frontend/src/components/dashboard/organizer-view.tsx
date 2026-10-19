@@ -34,6 +34,16 @@ function ago(iso: string) {
   return `${d} day${d > 1 ? "s" : ""} ago`;
 }
 
+/** Exact Indian time: "12:48 pm" for today, "18 Oct, 12:48 pm" for earlier days. */
+function ist(iso: string) {
+  const d = new Date(iso);
+  const tz = "Asia/Kolkata";
+  const time = d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: tz });
+  const day = (x: Date) => x.toLocaleDateString("en-CA", { timeZone: tz });
+  if (day(d) === day(new Date())) return time;
+  return `${d.toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: tz })}, ${time}`;
+}
+
 /** Interns on the batch (joined or invited), with no tasks yet (task tables are not in Neon yet). */
 function fromInvites(invites: Invite[]): Intern[] {
   return invites
@@ -208,9 +218,9 @@ export function OrganizerView({ invites }: { name?: string; invites: Invite[] })
                   <p className="truncate font-semibold">{i.name}</p>
                   <p className="truncate text-sm text-moss">{i.task}</p>
                   {i.lastSignInAt && (
-                    <p className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold text-neem">
+                    <p suppressHydrationWarning className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold text-neem">
                       <span aria-hidden className="size-2 rounded-full bg-tulsi ring-1 ring-neem/30" />
-                      Signed in {ago(i.lastSignInAt)}
+                      Signed in {ago(i.lastSignInAt)} · {ist(i.lastSignInAt)} IST
                     </p>
                   )}
                   <GrowBar

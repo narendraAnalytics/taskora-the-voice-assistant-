@@ -24,8 +24,5 @@ export const STATUS_LABEL: Record<Status, string> = {
   overdue: "Overdue",
 };
 
-export const MY_TASKS: { id: string; title: string; status: Status; due: string; progress: number }[] = [
-  { id: "t1", title: "Build the standup recorder", status: "progress", due: "Today", progress: 60 },
-  { id: "t2", title: "Write test cases for login", status: "todo", due: "Thu", progress: 0 },
-  { id: "t3", title: "Fix mobile nav spacing", status: "done", due: "Mon", progress: 100 },
-];
+/** An intern's own task. There is no task table in Neon yet, so the intern page starts empty. */
+export type MyTask = { id: string; title: string; status: Status; due: string; progress: number };
