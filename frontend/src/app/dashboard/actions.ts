@@ -148,7 +148,6 @@ export async function inviteIntern(input: InviteInput): Promise<InviteResult> {
   const emailError = acceptUrl
     ? await sendInviteEmail(email, {
         internName: name,
-        organizerName: s.name,
         acceptUrl,
         position: profile.position,
         college: profile.college,

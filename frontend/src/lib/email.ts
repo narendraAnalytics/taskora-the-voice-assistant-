@@ -12,7 +12,7 @@ export async function sendInviteEmail(to: string, props: InviteEmailProps): Prom
   const { error } = await new Resend(key).emails.send({
     from: FROM,
     to,
-    subject: `${props.organizerName} added you to their intern batch on Taskora`,
+    subject: `Team added you to their intern batch on Taskora`,
     react: InviteEmail(props),
   });
   return error ? `Could not send the email: ${error.message}` : null;

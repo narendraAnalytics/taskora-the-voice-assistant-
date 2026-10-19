@@ -2,7 +2,6 @@ import { Body, Button, Container, Head, Heading, Hr, Html, Preview, Section, Tex
 
 export type InviteEmailProps = {
   internName: string;
-  organizerName: string;
   acceptUrl: string;
   position?: string | null;
   college?: string | null;
@@ -14,7 +13,7 @@ export type InviteEmailProps = {
 // Palette: neem green, haldi, saffron, paper. No white, black or blue.
 const c = { neem: "#173f30", moss: "#4e6b57", paper: "#fce7b2", deep: "#f3d488", haldi: "#f2b33d", saffron: "#e8622a", tulsi: "#7dbe8f" };
 
-export function InviteEmail({ internName, organizerName, acceptUrl, position, college, duration, startDate, language }: InviteEmailProps) {
+export function InviteEmail({ internName, acceptUrl, position, college, duration, startDate, language }: InviteEmailProps) {
   const first = internName.split(" ")[0];
   const rows = [
     position && ["Position", position],
@@ -27,7 +26,7 @@ export function InviteEmail({ internName, organizerName, acceptUrl, position, co
   return (
     <Html lang="en">
       <Head />
-      <Preview>{organizerName} added you to their intern batch on Taskora. Set up your account.</Preview>
+      <Preview>Team has added you to their intern batch on Taskora. Set up your account.</Preview>
       <Body style={{ backgroundColor: c.paper, margin: 0, padding: "24px 12px", fontFamily: "Helvetica, Arial, sans-serif", color: c.neem }}>
         <Container style={{ maxWidth: 520, margin: "0 auto" }}>
           <Section style={{ backgroundColor: c.neem, borderRadius: "24px 24px 0 0", padding: "22px 28px", textAlign: "center" }}>
@@ -40,7 +39,7 @@ export function InviteEmail({ internName, organizerName, acceptUrl, position, co
               Welcome, {first}!
             </Heading>
             <Text style={{ margin: "0 0 18px", fontSize: 16, lineHeight: "24px" }}>
-              <strong>{organizerName}</strong> has added you to their intern batch on Taskora. Give a 20-second voice update each day, in the
+              <strong>Team</strong> has added you to their intern batch on Taskora. Give a 20-second voice update each day, in the
               language you like, and Taskora keeps the board current for you.
             </Text>
 
