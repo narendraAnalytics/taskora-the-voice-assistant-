@@ -42,7 +42,7 @@ function fromInvites(invites: Invite[]): Intern[] {
     });
 }
 
-export function OrganizerView({ name, invites }: { name: string; invites: Invite[] }) {
+export function OrganizerView({ invites }: { name?: string; invites: Invite[] }) {
   const [list, setList] = useState(invites);
   const [interns, setInterns] = useState<Intern[]>(() => fromInvites(invites));
   // Re-sync the board when the set of joined interns changes (completed, removed or newly joined).
@@ -72,10 +72,10 @@ export function OrganizerView({ name, invites }: { name: string; invites: Invite
   const feed = interns.filter((i) => i.update).sort((a, b) => (a.updatedAt === "Just now" ? -1 : b.updatedAt === "Just now" ? 1 : 0));
 
   return (
-    <Shell name={name} role="organizer" title="Organizer dashboard" subtitle="Here is your intern batch today." action={<InviteDialog initial={invites} onChange={setList} />}>
+    <Shell name="Team" role="organizer" title="Organizer dashboard" subtitle="Here is your intern batch today." action={<InviteDialog initial={invites} onChange={setList} />}>
       <div className="grid gap-5 lg:grid-cols-12">
         <PaperCard i={0} tilt={-1.5} className="lg:col-span-7">
-          <Jarvis name={name} interns={interns} onReassign={reassign} />
+          <Jarvis name="Team" interns={interns} onReassign={reassign} />
         </PaperCard>
 
         <StatCards interns={interns} />
