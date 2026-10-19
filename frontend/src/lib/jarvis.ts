@@ -46,7 +46,7 @@ export function matchInterns(interns: Intern[], spoken: string): Intern[] {
   return interns.filter((i) => i.name.toLowerCase().split(" ").includes(q) || i.name.toLowerCase() === q || i.aliases.includes(q));
 }
 
-function findNames(interns: Intern[], text: string) {
+export function findNames(interns: Intern[], text: string) {
   const t = text.toLowerCase();
   return interns
     .map((i) => ({ i, at: Math.min(...[i.name.toLowerCase(), ...i.aliases].map((a) => (t.includes(a) ? t.indexOf(a) : 1e9))) }))
@@ -54,8 +54,8 @@ function findNames(interns: Intern[], text: string) {
     .sort((a, b) => a.at - b.at);
 }
 
-/** First name, unless another intern shares it ("Ravi Teja" vs "Ravi K"). */
-const short = (i: Intern, all: Intern[]) => (all.filter((x) => first(x.name) === first(i.name)).length > 1 ? i.name : first(i.name));
+/** Always the full name ("Ravi Teja"), spoken and shown, for every intern. */
+const short = (i: Intern, _all?: Intern[]) => i.name;
 const howIs = (i: Intern, all: Intern[]) => `How is ${short(i, all)} doing?`;
 
 const isBehind = (i: Intern) => i.status === "overdue" || i.status === "blocked";

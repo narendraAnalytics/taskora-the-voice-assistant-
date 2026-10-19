@@ -4,7 +4,7 @@ import { useCallback, useRef, type RefObject } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { assignTask, emailTask } from "@/app/dashboard/task-actions";
 import type { Intern } from "@/lib/demo-data";
-import { isNo, isYes, matchInterns, words } from "@/lib/jarvis";
+import { findNames, isNo, isYes, matchInterns, words } from "@/lib/jarvis";
 import { fmtDue, PAST_DATE_ERROR, spokenDate, todayIST } from "@/lib/task-types";
 import { extractTaskIntent } from "@/lib/voice/api";
 
@@ -32,9 +32,12 @@ export const looksLikeNewTask = (text: string) => {
   return GIVES_WORK.test(t) && !NOT_NEW.test(t);
 };
 
-const first = (s: string) => s.split(" ")[0];
-/** First name, unless two interns share it. */
-const shortName = (i: Intern, all: Intern[]) => (all.filter((x) => first(x.name) === first(i.name)).length > 1 ? i.name : first(i.name));
+/** "email him", "mail Ravi the task", "send the task to Anjali by email". */
+const EMAIL_WORDS = /\be-?mail\b|\bmail\b|\bsend\b.*\b(task|it|him|her|them|details)\b/;
+export const looksLikeEmailRequest = (text: string) => EMAIL_WORDS.test(text.toLowerCase().replace(/[’']/g, ""));
+
+/** Full name, e.g. "Ravi Teja", for every intern. */
+const shortName = (i: Intern, _all?: Intern[]) => i.name;
 
 /**
  * The "give someone a task" conversation. Slots are filled across turns (who, what, by when), then one
@@ -156,6 +159,46 @@ export function useTaskFlow({
     [setCard],
   );
 
+  /**
+   * "Email him": mail an intern the task they already have. Who: a name in the sentence, else the person we
+   * were just talking about (`lastId`, so "he/him" works after "How is Ravi doing?").
+   */
+  const tryEmail = useCallback(
+    async (text: string, lastId?: string): Promise<boolean> => {
+      const all = internsRef.current ?? [];
+      const t = text.toLowerCase().replace(/[’']/g, "");
+      const named = findNames(all, t);
+      const exact = named.filter((x) => t.includes(x.i.name.toLowerCase()));
+      const pool = (exact.length ? exact : named).map((x) => x.i);
+      const reply = (s: string, after: After = "question") => void say(s, [s], after);
+
+      let who: Intern | undefined;
+      if (pool.length > 1) {
+        const q = `Which one should I email: ${pool.map((p) => p.name).join(" or ")}? Say it again with the full name.`;
+        setChips(pool.map((p) => `Email ${p.name}`));
+        reply(q);
+        return true;
+      }
+      who = pool[0] ?? all.find((i) => i.id === lastId);
+      if (!who) {
+        reply("Who should I email? Say their name.");
+        return true;
+      }
+      const name = shortName(who, all);
+      if (!who.taskId) {
+        reply(`${name} has no task allocated yet, so there is nothing to email. Want to allocate one?`);
+        return true;
+      }
+      if (!who.joined) {
+        reply(`${name} hasn't joined yet, so I can't email the task. It will show on their page once they sign in. Anything else?`);
+        return true;
+      }
+      void sendEmail(who.taskId, name);
+      return true;
+    },
+    [internsRef, say, sendEmail, setChips],
+  );
+
   /** Returns true when the sentence was part of a task conversation (and has been answered). */
   const tryHandle = useCallback(
     async (text: string): Promise<boolean> => {
@@ -266,5 +309,5 @@ export function useTaskFlow({
     [askNext, cancel, getToken, internsRef, no, say, sendEmail, setCard, setChips, yes],
   );
 
-  return { tryHandle, start, yes, no, cancel, active: () => draft.current !== null };
+  return { tryHandle, tryEmail, start, yes, no, cancel, active: () => draft.current !== null };
 }

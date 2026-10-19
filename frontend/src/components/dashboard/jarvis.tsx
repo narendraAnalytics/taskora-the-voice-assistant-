@@ -10,7 +10,7 @@ import { CallScreen, STATUS, ThinkingDots, UndoPill } from "@/components/dashboa
 import { useSpeech } from "@/lib/use-speech";
 import { closingKind, goodbye, greeting, isNo, isRepeat, isWait, isYes, respond, SUGGESTIONS, type Ctx, type Reply } from "@/lib/jarvis";
 import type { Intern } from "@/lib/demo-data";
-import { looksLikeNewTask, useTaskFlow, type TaskCard } from "@/components/dashboard/use-task-flow";
+import { looksLikeEmailRequest, looksLikeNewTask, useTaskFlow, type TaskCard } from "@/components/dashboard/use-task-flow";
 
 type Msg = { from: "you" | "taskora"; text: string };
 type Pending = Extract<Reply, { kind: "clarify" }>;
@@ -143,12 +143,18 @@ export function Jarvis({
       setNapping(false);
       setMood("neutral");
       setLog((l) => [...l, { from: "you", text }]);
+      // "Email him" about a task that already exists (also right after "Want me to email Ravi?").
+      const emailOrRoute = () => {
+        if (looksLikeEmailRequest(text)) void flow.tryEmail(text, convo.current.lastId);
+        else route(text);
+      };
       if (!confirmRef.current && (flow.active() || looksLikeNewTask(text))) {
         void flow.tryHandle(text).then((handled) => {
-          if (!handled) route(text);
+          if (!handled) emailOrRoute();
         });
         return;
       }
+      if (!confirmRef.current) return emailOrRoute();
       route(text);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
