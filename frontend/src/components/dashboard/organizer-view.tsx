@@ -50,7 +50,8 @@ function fromInvites(invites: Invite[]): Intern[] {
         due: "—",
         update: "",
         updatedAt: "",
-        lastSignInAt: i.lastSignInAt,
+        // Only joined interns have "signed in"; an invited one has not used their invite yet.
+        lastSignInAt: i.status === "joined" ? i.lastSignInAt : null,
       };
     });
 }

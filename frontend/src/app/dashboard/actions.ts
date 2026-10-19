@@ -124,6 +124,14 @@ export async function inviteIntern(input: InviteInput): Promise<InviteResult> {
   if (!internUserId) {
     internUserId = crypto.randomUUID();
     await db.insert(baUser).values({ id: internUserId, name, email });
+  } else {
+    // A fresh invitation starts clean: drop leftover sessions, unless the intern is currently joined elsewhere.
+    const [joinedElsewhere] = await db
+      .select({ id: internInvites.id })
+      .from(internInvites)
+      .where(and(eq(internInvites.internUserId, known.id), eq(internInvites.status, "joined")))
+      .limit(1);
+    if (!joinedElsewhere) await db.delete(baSession).where(eq(baSession.userId, known.id));
   }
 
   // 2. The invite row. The email is built from it, so it goes in first.
