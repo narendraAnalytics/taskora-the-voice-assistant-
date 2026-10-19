@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Show, SignInButton, UserButton, useAuth, useUser } from "@clerk/nextjs";
+import { Show, UserButton, useAuth, useUser } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/landing/logo";
 
@@ -84,14 +84,13 @@ export function SiteNav() {
           </a>
           <Show when="signed-out">
             {/* Interns lose the invite email? They can request a fresh one-time link here. */}
-            <a href="/intern-login" className="rounded-full px-3 py-1.5 font-semibold hover:text-saffron">
-              Intern<span className="hidden sm:inline"> sign in</span>
+            <a href="/intern-login" className="relative inline-flex overflow-hidden rounded-full p-[2.5px] font-semibold">
+              <span
+                aria-hidden
+                className="absolute left-1/2 top-1/2 aspect-square w-[200%] -translate-x-1/2 -translate-y-1/2 animate-spin bg-[conic-gradient(#f2b33d,#e8622a,#b23a48,#7dbe8f,#f2b33d)] [animation-duration:3s] motion-reduce:animate-none"
+              />
+              <span className="relative rounded-full bg-paper px-4 py-1.5 text-neem hover:text-saffron">Intern sign in</span>
             </a>
-            <SignInButton mode="modal">
-              <button type="button" className="rounded-full px-3 py-1.5 font-semibold ring-2 ring-current hover:text-saffron">
-                Organizer<span className="hidden sm:inline"> sign in</span>
-              </button>
-            </SignInButton>
           </Show>
           <Show when="signed-in">
             <Greeting />
