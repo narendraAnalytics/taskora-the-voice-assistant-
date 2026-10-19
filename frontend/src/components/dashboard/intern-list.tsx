@@ -1,6 +1,6 @@
 "use client";
 
-import { GraduationCap, Trash2, Undo2, X } from "lucide-react";
+import { GraduationCap, Pencil, Trash2, Undo2, X } from "lucide-react";
 import type { Invite } from "@/app/dashboard/actions";
 import { Avatar } from "@/components/dashboard/status-chip";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,7 @@ type Props = {
   setConfirm: (c: Confirm) => void;
   pending: boolean;
   error: string;
+  onEdit: (invite: Invite) => void;
   onRevoke: (id: string) => void;
   onComplete: (id: string) => void;
   onReopen: (id: string) => void;
@@ -34,7 +35,7 @@ const pillBtn =
   "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-bold ring-1 ring-neem/25 focus-visible:outline-2 focus-visible:outline-saffron";
 
 /** Interns grouped Active / Completed. Completing or removing asks first; invited rows keep the revoke X. */
-export function InternList({ invites, view, setView, confirm, setConfirm, pending, error, onRevoke, onComplete, onReopen, onRemove }: Props) {
+export function InternList({ invites, view, setView, confirm, setConfirm, pending, error, onEdit, onRevoke, onComplete, onReopen, onRemove }: Props) {
   const done = invites.filter((i) => i.status === "completed");
   const active = invites.filter((i) => i.status !== "completed");
   const tab = done.length === 0 ? "active" : view;
@@ -78,6 +79,11 @@ export function InternList({ invites, view, setView, confirm, setConfirm, pendin
               <Trash2 className="size-4" aria-hidden />
             </button>
           );
+          const edit = (
+            <button type="button" onClick={() => onEdit(i)} disabled={pending} aria-label={`Edit ${label}`} className={cn(iconBtn, "hover:bg-haldi hover:text-neem")}>
+              <Pencil className="size-4" aria-hidden />
+            </button>
+          );
           return (
             <li key={i.id} className="py-3">
               <div className="flex flex-wrap items-center gap-3">
@@ -92,6 +98,7 @@ export function InternList({ invites, view, setView, confirm, setConfirm, pendin
                   <p className="truncate text-sm text-moss">{[i.college, i.email, i.phone].filter(Boolean).join(" · ")}</p>
                 </div>
                 <span className={cn("rounded-full px-2.5 py-1 text-xs font-bold", chipTone)}>{chipText}</span>
+                {edit}
 
                 {i.status === "invited" && (
                   <button type="button" onClick={() => onRevoke(i.id)} disabled={pending} aria-label={`Revoke invite for ${i.email}`} className={iconBtn}>

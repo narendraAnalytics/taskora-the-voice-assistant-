@@ -272,3 +272,19 @@ export async function removeIntern(id: string): Promise<InviteResult> {
   await db.delete(internInvites).where(eq(internInvites.id, row.id));
   return { ok: true, invites: await listFor(s.userId) };
 }
+
+const profileSchema = inviteSchema.omit({ email: true });
+export type ProfileInput = z.input<typeof profileSchema>;
+
+/** Edit an intern's details. The email is fixed: it is tied to their invitation and sign-in. */
+export async function updateIntern(id: string, input: ProfileInput): Promise<InviteResult> {
+  const s = await requireOrganizer();
+  const row = await ownedInvite(s.userId, id);
+  if (!row || row.status === "revoked") return { ok: false, error: "Unknown intern." };
+
+  const parsed = profileSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the details." };
+
+  await db.update(internInvites).set(parsed.data).where(eq(internInvites.id, row.id));
+  return { ok: true, invites: await listFor(s.userId) };
+}

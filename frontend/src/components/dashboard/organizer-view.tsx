@@ -22,17 +22,17 @@ const MIX: [Status, string][] = [
   ["overdue", "bg-saffron"],
 ];
 
-/** Interns who have joined, with no tasks yet (task tables are not in Neon yet). */
+/** Interns on the batch (joined or invited), with no tasks yet (task tables are not in Neon yet). */
 function fromInvites(invites: Invite[]): Intern[] {
   return invites
-    .filter((i) => i.status === "joined")
+    .filter((i) => i.status === "joined" || i.status === "invited")
     .map((i) => {
       const full = i.name ?? i.email;
       return {
         id: i.id,
         name: full,
         aliases: [...new Set([full.toLowerCase(), full.split(" ")[0].toLowerCase()])],
-        task: "No task yet",
+        task: i.status === "invited" ? "Invite sent, not joined yet" : "No task yet",
         status: "todo" as Status,
         progress: 0,
         due: "—",
@@ -45,8 +45,8 @@ function fromInvites(invites: Invite[]): Intern[] {
 export function OrganizerView({ invites }: { name?: string; invites: Invite[] }) {
   const [list, setList] = useState(invites);
   const [interns, setInterns] = useState<Intern[]>(() => fromInvites(invites));
-  // Re-sync the board when the set of joined interns changes (completed, removed or newly joined).
-  const joinedKey = list.filter((i) => i.status === "joined").map((i) => i.id).join();
+  // Re-sync the board when the set of interns changes (invited, joined, completed or removed).
+  const joinedKey = list.filter((i) => i.status === "joined" || i.status === "invited").map((i) => i.id).join();
   const [seenKey, setSeenKey] = useState(joinedKey);
   if (joinedKey !== seenKey) {
     setSeenKey(joinedKey);
@@ -130,7 +130,7 @@ export function OrganizerView({ invites }: { name?: string; invites: Invite[] })
 
           {interns.length === 0 && (
             <p className="font-note mt-6 rounded-2xl bg-paper px-4 py-6 text-center text-moss">
-              No interns have joined yet. Use “Add interns” to invite your first one.
+              No interns yet. Use “Add interns” to invite your first one.
             </p>
           )}
           <ul className="mt-3 divide-y divide-neem/10">

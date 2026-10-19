@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
@@ -27,6 +27,7 @@ import {
   removeIntern,
   reopenIntern,
   revokeInvite,
+  updateIntern,
   type Invite,
   type InviteResult,
 } from "@/app/dashboard/actions";
@@ -391,6 +392,9 @@ export function InviteDialog({ initial, onChange }: { initial: Invite[]; onChang
   const [view, setView] = useState<"active" | "completed">("active");
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [listError, setListError] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [saved, setSaved] = useState("");
+  const topRef = useRef<HTMLDivElement>(null);
   const update = (next: Invite[]) => {
     setInvites(next);
     onChange?.(next);
@@ -412,18 +416,60 @@ export function InviteDialog({ initial, onChange }: { initial: Invite[]; onChang
     setStep(1);
   };
 
+  const startEdit = (i: Invite) => {
+    setForm({
+      name: i.name ?? "",
+      email: i.email,
+      phone: i.phone ?? "",
+      language: i.language ?? "",
+      position: i.position ?? "",
+      college: i.college ?? "",
+      degree: i.degree ?? "",
+      studyYear: i.studyYear ?? "",
+      durationMonths: i.durationMonths,
+      startDate: i.startDate ?? "",
+      skills: i.skills,
+    });
+    setOtherPosition(!!i.position && !(POSITIONS as readonly string[]).includes(i.position));
+    setEditingId(i.id);
+    setSent(null);
+    setSaved("");
+    setError("");
+    setStep(0);
+    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setForm(emptyForm);
+    setOtherPosition(false);
+    setError("");
+    setStep(0);
+  };
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (step === 0) return next();
     setError("");
+    setSaved("");
+    const profile = {
+      ...form,
+      degree: form.degree || undefined,
+      studyYear: (form.studyYear || null) as (typeof STUDY_YEARS)[number] | null,
+      language: (form.language || null) as (typeof LANGUAGES)[number] | null,
+      startDate: form.startDate || null,
+    };
     start(async () => {
-      const r = await inviteIntern({
-        ...form,
-        degree: form.degree || undefined,
-        studyYear: (form.studyYear || null) as (typeof STUDY_YEARS)[number] | null,
-        language: (form.language || null) as (typeof LANGUAGES)[number] | null,
-        startDate: form.startDate || null,
-      });
+      if (editingId) {
+        const { email: _email, ...rest } = profile;
+        const r = await updateIntern(editingId, rest);
+        if (!r.ok) return setError(r.error);
+        update(r.invites);
+        setSaved(`Saved changes for ${form.name.trim()}.`);
+        cancelEdit();
+        return;
+      }
+      const r = await inviteIntern(profile);
       if (!r.ok) return setError(r.error);
       update(r.invites);
       setSent({ name: form.name.trim(), email: form.email.trim(), position: form.position.trim() });
@@ -451,6 +497,8 @@ export function InviteDialog({ initial, onChange }: { initial: Invite[]; onChang
         setOpen(o);
         if (!o) {
           setError("");
+          setSaved("");
+          if (editingId) cancelEdit();
         }
       }}
     >
@@ -467,10 +515,24 @@ export function InviteDialog({ initial, onChange }: { initial: Invite[]; onChang
       </DialogTrigger>
 
       <DialogContent className="max-h-[90svh] gap-0 overflow-y-auto rounded-[2rem] bg-paper p-6 text-neem ring-2 ring-neem/20 sm:max-w-4xl sm:p-8">
-        <DialogTitle className="font-hand text-4xl font-bold leading-none">Add an intern</DialogTitle>
+        <div ref={topRef} className="-mt-6" aria-hidden />
+        <DialogTitle className="font-hand text-4xl font-bold leading-none">{editingId ? "Edit intern" : "Add an intern"}</DialogTitle>
         <DialogDescription className="font-note mt-2 text-base text-moss">
-          They get an email link to set their own password. Nothing to share.
+          {editingId
+            ? "Changes save straight away and no email is sent. The email address cannot be changed."
+            : "They get an email link to set their own password. Nothing to share."}
         </DialogDescription>
+        {saved && !editingId && (
+          <p role="status" className="mt-4 rounded-xl bg-tulsi px-4 py-2.5 text-sm font-semibold text-neem">
+            {saved}
+          </p>
+        )}
+        {editingId && (
+          <button type="button" onClick={cancelEdit} className="mt-3 inline-flex items-center gap-1.5 text-sm font-bold underline decoration-saffron decoration-2 underline-offset-4">
+            <X className="size-4" aria-hidden />
+            Cancel editing
+          </button>
+        )}
 
         {sent ? (
           <Sent
@@ -513,7 +575,8 @@ export function InviteDialog({ initial, onChange }: { initial: Invite[]; onChang
                       value={form.email}
                       onChange={(e) => set("email", e.target.value)}
                       placeholder="ravi@college.edu"
-                      className={textInput()}
+                      disabled={!!editingId}
+                      className={textInput("disabled:cursor-not-allowed disabled:opacity-60")}
                       autoComplete="off"
                     />
                   </Field>
@@ -664,8 +727,8 @@ export function InviteDialog({ initial, onChange }: { initial: Invite[]; onChang
                   </>
                 ) : (
                   <>
-                    <MailPlus className="size-5" aria-hidden />
-                    {pending ? "Saving…" : "Save and send invite"}
+                    {editingId ? <Check className="size-5" aria-hidden /> : <MailPlus className="size-5" aria-hidden />}
+                    {pending ? "Saving…" : editingId ? "Save changes" : "Save and send invite"}
                   </>
                 )}
               </button>
@@ -688,6 +751,7 @@ export function InviteDialog({ initial, onChange }: { initial: Invite[]; onChang
             setConfirm={setConfirm}
             pending={pending}
             error={listError}
+            onEdit={startEdit}
             onRevoke={(id) => act(revokeInvite, id)}
             onComplete={(id) => act(completeIntern, id)}
             onReopen={(id) => act(reopenIntern, id)}
