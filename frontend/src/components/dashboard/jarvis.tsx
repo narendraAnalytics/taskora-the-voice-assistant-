@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Tape } from "@/components/dashboard/motion";
 import { TalkingFace, type FaceMood } from "@/components/dashboard/talking-face";
 import { CallScreen, STATUS, ThinkingDots, UndoPill } from "@/components/dashboard/call-screen";
+import { saveChat } from "@/app/dashboard/task-actions";
 import { useSpeech } from "@/lib/use-speech";
 import { closingKind, goodbye, greeting, isNo, isRepeat, isWait, isYes, respond, SUGGESTIONS, type Ctx, type Reply } from "@/lib/jarvis";
 import type { Intern } from "@/lib/demo-data";
@@ -32,18 +33,35 @@ const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
  */
 export function Jarvis({
   name,
+  savedChat = [],
   interns,
   onReassign,
   onTaskChange,
 }: {
   name: string;
+  /** The chat saved in Neon, so it survives sign out. Only the eraser button clears it. */
+  savedChat?: Msg[];
   interns: Intern[];
   onReassign: (fromId: string, toId: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   /** Called after Taskora saves a task, so the board reloads. */
   onTaskChange: () => void;
 }) {
   const welcome = `Welcome, ${name}! I'm Taskora, and I'll guide you through your batch. Ask me how many interns you have, what their tasks are, or tell me to give someone a task, and I'll take care of the rest.`;
-  const [log, setLog] = useState<Msg[]>([{ from: "taskora", text: welcome }]);
+  const [log, setLog] = useState<Msg[]>(savedChat.length ? savedChat : [{ from: "taskora", text: welcome }]);
+  // Keep the chat in Neon (after a short pause) so signing out and in does not lose it.
+  const savedJson = useRef(JSON.stringify(savedChat));
+  useEffect(() => {
+    const onlyWelcome = log.length === 1 && log[0].text === welcome;
+    const json = JSON.stringify(onlyWelcome ? [] : log);
+    if (json === savedJson.current) return;
+    const t = window.setTimeout(() => {
+      savedJson.current = json;
+      void saveChat(onlyWelcome ? [] : log).catch(() => {
+        savedJson.current = "";
+      });
+    }, 800);
+    return () => window.clearTimeout(t);
+  }, [log, welcome]);
   const greeted = useRef(false);
   const followUp = useRef(0);
   const farewells = useRef(0);

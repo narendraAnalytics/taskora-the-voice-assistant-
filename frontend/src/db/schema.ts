@@ -115,3 +115,12 @@ export const organizerMessages = pgTable("organizer_messages", {
   body: text("body").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** The organizer's Ask Taskora chat, kept so it survives sign out. Only the organizer's eraser button clears it. */
+export const organizerChats = pgTable("organizer_chats", {
+  organizerId: text("organizer_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  log: jsonb("log").$type<{ from: "you" | "taskora"; text: string }[]>().notNull().default(sql`'[]'`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

@@ -1,7 +1,7 @@
 import "server-only";
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { internInvites, organizerMessages, standups, tasks, type TaskRow } from "@/db/schema";
+import { internInvites, organizerChats, organizerMessages, standups, tasks, type TaskRow } from "@/db/schema";
 import { todayIST, type MessageView, type StandupView, type TaskView } from "@/lib/task-types";
 
 export function toView(r: TaskRow): TaskView {
@@ -81,3 +81,10 @@ export const listMessagesForInvite = (inviteId: string, limit = 30) => messages(
 
 /** Messages this organizer has sent (shown under the matching standup). */
 export const listMessagesForOrganizer = (organizerId: string, limit = 60) => messages(eq(organizerMessages.organizerId, organizerId), limit);
+
+export type ChatMsg = { from: "you" | "taskora"; text: string };
+
+export async function loadChat(organizerId: string): Promise<ChatMsg[]> {
+  const [row] = await db.select({ log: organizerChats.log }).from(organizerChats).where(eq(organizerChats.organizerId, organizerId)).limit(1);
+  return row?.log ?? [];
+}

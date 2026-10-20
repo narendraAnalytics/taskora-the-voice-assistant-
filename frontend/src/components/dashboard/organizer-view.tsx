@@ -147,7 +147,7 @@ function ReplyBox({ s, onSent, joined }: { s: StandupView; onSent: (m: MessageVi
   );
 }
 
-export function OrganizerView({ invites, tasks: firstTasks, standups: firstStandups, messages: firstMessages = [] }: { name?: string; invites: Invite[]; tasks: TaskView[]; standups: StandupView[]; messages?: MessageView[] }) {
+export function OrganizerView({ invites, tasks: firstTasks, standups: firstStandups, messages: firstMessages = [], chat = [] }: { name?: string; invites: Invite[]; tasks: TaskView[]; standups: StandupView[]; messages?: MessageView[]; chat?: { from: "you" | "taskora"; text: string }[] }) {
   const [sent, setSent] = useState(firstMessages);
   const feedRoot = useRef<HTMLDivElement>(null);
   const [who, setWho] = useState<string>("all");
@@ -255,7 +255,7 @@ export function OrganizerView({ invites, tasks: firstTasks, standups: firstStand
       </AnimatePresence>
       <div className="grid gap-5 lg:grid-cols-12">
         <PaperCard i={0} tilt={-1.5} className="lg:col-span-7">
-          <Jarvis name="Team" interns={interns} onReassign={reassign} onTaskChange={refreshTasks} />
+          <Jarvis name="Team" savedChat={chat} interns={interns} onReassign={reassign} onTaskChange={refreshTasks} />
         </PaperCard>
 
         <StatCards interns={interns} invited={list.filter((i) => i.status === "invited").length} />

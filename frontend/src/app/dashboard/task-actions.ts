@@ -3,12 +3,12 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { internInvites, organizerMessages, taskEvents, tasks } from "@/db/schema";
+import { internInvites, organizerChats, organizerMessages, taskEvents, tasks } from "@/db/schema";
 import { BASE_URL } from "@/lib/base-url";
 import { sendMessageEmail, sendTaskEmail } from "@/lib/email";
 import { requireOrganizer } from "@/lib/session";
 import { fmtDue, PAST_DATE_ERROR, todayIST, type MessageView, type StandupView, type TaskResult, type TaskView } from "@/lib/task-types";
-import { listMessagesForOrganizer, listStandups, listTasksForOrganizer, toView } from "@/lib/tasks";
+import { loadChat, type ChatMsg, listMessagesForOrganizer, listStandups, listTasksForOrganizer, toView } from "@/lib/tasks";
 
 /** An intern on this organizer's batch who can still receive work (invited or joined). */
 async function ownInvite(organizerId: string, inviteId: string) {
@@ -131,4 +131,24 @@ export async function sendMessage(input: { inviteId: string; taskId: string | nu
 export async function getSentMessages(): Promise<MessageView[]> {
   const s = await requireOrganizer();
   return listMessagesForOrganizer(s.userId);
+}
+
+const chatSchema = z.array(z.object({ from: z.enum(["you", "taskora"]), text: z.string().max(3000) })).max(300);
+
+/** The saved Ask Taskora chat for this organizer (empty when none). */
+export async function getChat(): Promise<ChatMsg[]> {
+  const s = await requireOrganizer();
+  return loadChat(s.userId);
+}
+
+/** Save the chat (last 200 messages). Called by the dashboard after every change, including a clear. */
+export async function saveChat(log: ChatMsg[]): Promise<void> {
+  const s = await requireOrganizer();
+  const parsed = chatSchema.safeParse(log);
+  if (!parsed.success) return;
+  const keep = parsed.data.slice(-200);
+  await db
+    .insert(organizerChats)
+    .values({ organizerId: s.userId, log: keep })
+    .onConflictDoUpdate({ target: organizerChats.organizerId, set: { log: keep, updatedAt: new Date() } });
 }
