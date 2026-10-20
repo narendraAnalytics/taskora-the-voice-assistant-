@@ -8,6 +8,7 @@ import { db } from "@/db";
 import { baSession, baUser } from "@/db/auth-schema";
 import { internInvites, users } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import { capacityError } from "@/lib/billing";
 import { LANGUAGES, MAX_SKILLS, STUDY_YEARS } from "@/lib/intern-options";
 import { requireOrganizer } from "@/lib/session";
 
@@ -29,7 +30,7 @@ export type Invite = {
   /** Most recent intern sign-in (newest session), if any. */
   lastSignInAt: string | null;
 };
-export type InviteResult = { ok: true; invites: Invite[] } | { ok: false; error: string };
+export type InviteResult = { ok: true; invites: Invite[] } | { ok: false; error: string; code?: "plan" };
 
 /** Indian 10-digit numbers get +91; anything else must already be international (+…). */
 function normalisePhone(raw: string) {
@@ -117,6 +118,9 @@ export async function inviteIntern(input: InviteInput): Promise<InviteResult> {
   );
   if (existing?.status === "joined") return { ok: false, error: `${email} has already joined.` };
   if (existing?.status === "invited") return { ok: false, error: `${email} is already invited.` };
+  // Plan limits: no plan, no interns; each plan caps how many can be invited or joined at once.
+  const full = await capacityError(s.userId, s.role);
+  if (full) return { ok: false, error: full, code: "plan" };
 
   // 1. The intern's account. Sign-up is off in Better Auth, so it must exist before a link can be sent.
   const [known] = await db.select().from(baUser).where(eq(baUser.email, email)).limit(1);
@@ -246,6 +250,8 @@ export async function reopenIntern(id: string): Promise<InviteResult> {
   const row = await ownedInvite(s.userId, id);
   if (!row) return { ok: false, error: "Unknown intern." };
   if (row.status !== "completed") return { ok: false, error: "This internship is not marked completed." };
+  const full = await capacityError(s.userId, s.role);
+  if (full) return { ok: false, error: full, code: "plan" };
 
   if (row.userId) {
     try {

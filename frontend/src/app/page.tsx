@@ -5,6 +5,7 @@ import { HowItWorks } from "@/components/landing/how-it-works";
 import { SiteFooter } from "@/components/landing/site-footer";
 import { SiteNav } from "@/components/landing/site-nav";
 import { StaleSection } from "@/components/landing/stale-section";
+import { PlanCards } from "@/components/landing/plan-cards";
 import { Roles } from "@/components/landing/roles";
 import { pilotMailto } from "@/lib/site";
 
@@ -16,41 +17,6 @@ const RULES = [
   "Interns can only change their own tasks.",
   "Every change is logged, so you can undo it and any task can explain its history.",
   "Audio is deleted after 30 days. Transcripts stay so your history still makes sense.",
-];
-
-const PLANS = [
-  {
-    name: "Free",
-    price: "₹0",
-    period: "",
-    fit: "For a student team or college club",
-    features: ["1 team, up to 8 members", "Voice tasks and standups", "Team board and history"],
-  },
-  {
-    name: "Team",
-    price: "₹499",
-    period: "per month",
-    fit: "For a small agency or startup team",
-    features: [
-      "Up to 25 members",
-      "6 pm summaries for organizers",
-      "Email reminders",
-      "GitHub sync for tech interns",
-    ],
-    featured: true,
-  },
-  {
-    name: "Program",
-    price: "₹1,999",
-    period: "per batch, per month",
-    fit: "For colleges and training institutes",
-    features: [
-      "Up to 100 interns",
-      "Attendance by voice",
-      "Evaluations and certificates",
-      "Weekly reports for sponsors",
-    ],
-  },
 ];
 
 export default function Home() {
@@ -144,45 +110,9 @@ export default function Home() {
               Priced per team, not per seat
             </h2>
             <p className="mt-4 max-w-[38rem] text-lg text-moss">
-              So a batch of thirty interns costs the same as a batch of ten. Pilot prices, in rupees.
+              So a batch of thirty interns costs the same as a batch of ten. There is no free plan: every team starts on a paid plan, and the ₹150 Starter lets you test it with two interns. Prices are in rupees.
             </p>
-            <div className="mt-12 grid gap-5 lg:grid-cols-3">
-              {PLANS.map((p) => (
-                <div
-                  key={p.name}
-                  className={`flex flex-col rounded-[1.75rem] p-7 sm:p-8 ${
-                    p.featured ? "bg-saffron text-neem" : "bg-paper-deep/70 text-neem"
-                  }`}
-                >
-                  <h3 className="display text-2xl">{p.name}</h3>
-                  <p className={p.featured ? "text-neem/80" : "text-moss"}>{p.fit}</p>
-                  <p className="mt-6 flex items-baseline gap-2">
-                    <span className="display-wide text-5xl">{p.price}</span>
-                    {p.period && (
-                      <span className={p.featured ? "text-neem/80" : "text-moss"}>{p.period}</span>
-                    )}
-                  </p>
-                  <ul className="mt-6 flex-1 space-y-2.5">
-                    {p.features.map((f) => (
-                      <li key={f} className="flex gap-2.5">
-                        <Check className="mt-1 size-4 shrink-0" strokeWidth={3} />
-                        <span>{f}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <a
-                    href="#pilot"
-                    className={`mt-8 rounded-full px-5 py-3 text-center font-semibold ${
-                      p.featured
-                        ? "bg-neem text-paper hover:bg-neem-soft"
-                        : "text-neem ring-2 ring-neem hover:bg-neem hover:text-paper"
-                    }`}
-                  >
-                    Join the pilot
-                  </a>
-                </div>
-              ))}
-            </div>
+            <PlanCards />
           </div>
         </section>
 

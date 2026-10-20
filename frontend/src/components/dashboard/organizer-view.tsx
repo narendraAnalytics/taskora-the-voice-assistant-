@@ -14,6 +14,7 @@ import { Avatar, StatusChip } from "@/components/dashboard/status-chip";
 import { Shell } from "@/components/dashboard/shell";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { GrowBar, PaperCard, Tape } from "@/components/dashboard/motion";
+import type { MyPlan } from "@/lib/plans";
 import { ScrollFeed } from "@/components/dashboard/scroll-feed";
 import { cn } from "@/lib/utils";
 
@@ -147,7 +148,8 @@ function ReplyBox({ s, onSent, joined }: { s: StandupView; onSent: (m: MessageVi
   );
 }
 
-export function OrganizerView({ invites, tasks: firstTasks, standups: firstStandups, messages: firstMessages = [], chat = [] }: { name?: string; invites: Invite[]; tasks: TaskView[]; standups: StandupView[]; messages?: MessageView[]; chat?: { from: "you" | "taskora"; text: string }[] }) {
+export function OrganizerView({ invites, tasks: firstTasks, standups: firstStandups, messages: firstMessages = [], chat = [], plan }: {
+  plan?: MyPlan; name?: string; invites: Invite[]; tasks: TaskView[]; standups: StandupView[]; messages?: MessageView[]; chat?: { from: "you" | "taskora"; text: string }[] }) {
   const [sent, setSent] = useState(firstMessages);
   const feedRoot = useRef<HTMLDivElement>(null);
   const [who, setWho] = useState<string>("all");
@@ -220,7 +222,27 @@ export function OrganizerView({ invites, tasks: firstTasks, standups: firstStand
 
 
   return (
-    <Shell name="Team" role="organizer" title="Organizer dashboard" subtitle="Here is your intern batch today." action={<InviteDialog invites={list} onChange={setList} />}>
+    <Shell name="Team" role="organizer" title="Organizer dashboard" subtitle="Here is your intern batch today." action={<InviteDialog invites={list} onChange={setList} plan={plan} />}>
+      {plan && (
+        <div className={cn("mb-5 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl px-5 py-3 font-semibold text-neem ring-2 ring-neem/20", plan.plan ? "bg-paper-deep" : "bg-saffron")}>
+          {plan.plan ? (
+            <>
+              <span className="font-note text-lg">
+                {plan.name} plan · {list.filter((i) => i.status === "invited" || i.status === "joined").length} of {plan.limit} interns
+              </span>
+              <span className="text-sm text-moss">Active until {new Date(plan.expiresAt!).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
+              {list.filter((i) => i.status === "invited" || i.status === "joined").length >= plan.limit && (
+                <a href="/#pricing" className="ml-auto rounded-full bg-neem px-3.5 py-1 text-sm font-bold text-haldi">Upgrade to add more</a>
+              )}
+            </>
+          ) : (
+            <>
+              <span className="font-note text-lg">No plan yet. Choose one to add interns.</span>
+              <a href="/#pricing" className="ml-auto rounded-full bg-neem px-3.5 py-1 text-sm font-bold text-haldi">See plans</a>
+            </>
+          )}
+        </div>
+      )}
       <AnimatePresence>
         {joinedNow.length > 0 && (
           <motion.div

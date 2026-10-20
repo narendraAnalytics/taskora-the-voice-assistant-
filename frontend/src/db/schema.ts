@@ -124,3 +124,28 @@ export const organizerChats = pgTable("organizer_chats", {
   log: jsonb("log").$type<{ from: "you" | "taskora"; text: string }[]>().notNull().default(sql`'[]'`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** A Razorpay order we created. Marked paid only after the payment signature (or webhook) is verified. */
+export const paymentOrders = pgTable("payment_orders", {
+  orderId: text("order_id").primaryKey(),
+  organizerId: text("organizer_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  plan: text("plan").notNull(),
+  amountPaise: integer("amount_paise").notNull(),
+  status: text("status").$type<"created" | "paid">().notNull().default("created"),
+  paymentId: text("payment_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+});
+
+/** The organizer's current plan. Active while expires_at is in the future. */
+export const subscriptions = pgTable("subscriptions", {
+  organizerId: text("organizer_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  plan: text("plan").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  lastPaymentId: text("last_payment_id"),
+});

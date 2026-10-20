@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Show, UserButton, useAuth, useUser } from "@clerk/nextjs";
+import { getMyPlan } from "@/app/billing/actions";
+import type { MyPlan } from "@/lib/plans";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/landing/logo";
 
@@ -11,6 +13,28 @@ function Greeting() {
   if (!name) return null;
   return (
     <span className="font-note max-w-[10rem] truncate text-lg font-bold sm:max-w-[16rem]">Welcome, {name}</span>
+  );
+}
+
+/** Shows the organizer's plan once paid ("Starter plan"), or a nudge to pick one. Hidden for interns and while loading. */
+function PlanPill() {
+  const [mine, setMine] = useState<MyPlan | null | undefined>(undefined);
+  useEffect(() => {
+    const load = () => void getMyPlan().then(setMine).catch(() => setMine(null));
+    load();
+    window.addEventListener("taskora-plan", load);
+    return () => window.removeEventListener("taskora-plan", load);
+  }, []);
+  if (!mine) return null;
+  return mine.plan ? (
+    <a href="/dashboard" className="inline-flex items-center gap-1.5 rounded-full bg-haldi px-3 py-1 text-sm font-bold text-neem ring-2 ring-neem/25 hover:bg-saffron">
+      <span aria-hidden className="size-2 rounded-full bg-neem" />
+      {mine.name} plan
+    </a>
+  ) : (
+    <a href="#pricing" className="inline-flex items-center rounded-full bg-saffron px-3 py-1 text-sm font-bold text-neem ring-2 ring-neem/25 hover:bg-haldi">
+      Choose a plan
+    </a>
   );
 }
 
@@ -93,6 +117,7 @@ export function SiteNav() {
             </a>
           </Show>
           <Show when="signed-in">
+            <PlanPill />
             <Greeting />
             <UserButton />
           </Show>

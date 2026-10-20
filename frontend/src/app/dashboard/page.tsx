@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { planFor } from "@/lib/billing";
 import { getSession, homeFor } from "@/lib/session";
 import { getInvites } from "./actions";
 import { getChat, getSentMessages, getStandups, getTasks } from "./task-actions";
@@ -13,7 +14,7 @@ async function Gate() {
   if (!s) redirect("/");
   // Interns never see the organizer dashboard — enforced here on the server.
   if (s.role === "intern") redirect(homeFor(s.role));
-  return <OrganizerView name={s.name} invites={await getInvites()} tasks={await getTasks()} standups={await getStandups()} messages={await getSentMessages()} chat={await getChat()} />;
+  return <OrganizerView name={s.name} invites={await getInvites()} tasks={await getTasks()} standups={await getStandups()} messages={await getSentMessages()} chat={await getChat()} plan={await planFor(s.userId)} />;
 }
 
 export default function DashboardPage() {

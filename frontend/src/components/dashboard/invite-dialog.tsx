@@ -35,6 +35,7 @@ import { Avatar } from "@/components/dashboard/status-chip";
 import { InternList, type Confirm } from "@/components/dashboard/intern-list";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DURATIONS, LANGUAGES, MAX_SKILLS, POSITIONS, STUDY_YEARS } from "@/lib/intern-options";
+import { PLANS, type MyPlan } from "@/lib/plans";
 import { cn } from "@/lib/utils";
 
 const inputBase =
@@ -386,7 +387,51 @@ function Stepper({ step }: { step: number }) {
  * Organizer-only "Add interns" button + form. Interns get an emailed link to set their own
  * password, so nothing secret is shared. Invited interns are listed under the form.
  */
-export function InviteDialog({ invites, onChange }: { invites: Invite[]; onChange: (invites: Invite[]) => void }) {
+/** Shown instead of the form when the plan has no room for another intern (or there is no plan yet). */
+function PlanLimit({ plan, used, onClose }: { plan: MyPlan | undefined; used: number; onClose: () => void }) {
+  const reduce = useReducedMotion();
+  const next = plan?.plan ? PLANS[PLANS.findIndex((p) => p.id === plan.plan) + 1] : undefined;
+  const top = !!plan?.plan && !next;
+  return (
+    <motion.div
+      role="alert"
+      initial={reduce ? false : { opacity: 0, y: 18, rotate: -1 }}
+      animate={{ opacity: 1, y: 0, rotate: 0 }}
+      transition={{ type: "spring", stiffness: 220, damping: 18 }}
+      className="relative mt-6 overflow-hidden rounded-[1.75rem] bg-neem p-6 text-paper sm:p-8"
+    >
+      <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 size-56 rounded-full bg-saffron/30 blur-3xl" />
+      <div className="relative flex flex-col items-center text-center">
+        <span className="grid size-16 place-items-center rounded-full bg-haldi text-neem ring-4 ring-haldi/30">
+          <Sparkles className="size-8" aria-hidden />
+        </span>
+        <h3 className="font-hand mt-4 text-4xl font-bold leading-none text-haldi">{plan?.plan ? `Your ${plan.name} plan is full` : "Pick a plan to add interns"}</h3>
+        <p className="font-note mt-3 max-w-md text-lg">
+          {plan?.plan
+            ? `You have ${used} of ${plan.limit} interns. ${next ? `Upgrade to ${next.name} and add up to ${next.members}.` : "Talk to us if you need more than 100 interns."}`
+            : "Every Taskora team starts on a plan. The Starter plan is just ₹150 and lets you add two interns."}
+        </p>
+        {plan?.plan && (
+          <div className="mt-5 h-3 w-full max-w-xs overflow-hidden rounded-full bg-neem-soft" aria-hidden>
+            <div className="h-full w-full rounded-full bg-saffron" />
+          </div>
+        )}
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          {!top && (
+            <a href="/#pricing" className="rounded-full bg-saffron px-6 py-3 text-lg font-bold text-neem shadow-[0_4px_0_#11332a] transition-transform hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
+              {next ? `Upgrade to ${next.name} · ${next.price}` : "See plans"}
+            </a>
+          )}
+          <button type="button" onClick={onClose} className="rounded-full px-6 py-3 text-lg font-bold ring-2 ring-paper/60 hover:bg-neem-soft">
+            Not now
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+export function InviteDialog({ invites, onChange, plan }: { invites: Invite[]; onChange: (invites: Invite[]) => void; plan?: MyPlan }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"active" | "completed">("active");
   const [confirm, setConfirm] = useState<Confirm>(null);
@@ -400,6 +445,10 @@ export function InviteDialog({ invites, onChange }: { invites: Invite[]; onChang
   const [otherPosition, setOtherPosition] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState<{ name: string; email: string; position: string } | null>(null);
+  const [planFull, setPlanFull] = useState(false);
+  const used = invites.filter((i) => i.status === "invited" || i.status === "joined").length;
+  // Adding (not editing) needs a plan with room. The server checks it again.
+  const blocked = !editingId && (planFull || (!!plan && (!plan.plan || used >= plan.limit)));
   const [pending, start] = useTransition();
   const waiting = invites.filter((i) => i.status === "invited").length;
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
@@ -466,7 +515,10 @@ export function InviteDialog({ invites, onChange }: { invites: Invite[]; onChang
         return;
       }
       const r = await inviteIntern(profile);
-      if (!r.ok) return setError(r.error);
+      if (!r.ok) {
+        if (r.code === "plan") return setPlanFull(true);
+        return setError(r.error);
+      }
       update(r.invites);
       setSent({ name: form.name.trim(), email: form.email.trim(), position: form.position.trim() });
       setForm(emptyForm);
@@ -492,6 +544,7 @@ export function InviteDialog({ invites, onChange }: { invites: Invite[]; onChang
       onOpenChange={(o) => {
         setOpen(o);
         if (!o) {
+          setPlanFull(false);
           setError("");
           setSaved("");
           if (editingId) cancelEdit();
@@ -539,6 +592,8 @@ export function InviteDialog({ invites, onChange }: { invites: Invite[]; onChang
               setOpen(false);
             }}
           />
+        ) : blocked ? (
+          <PlanLimit plan={plan} used={used} onClose={() => { setPlanFull(false); setOpen(false); }} />
         ) : (
           <>
         <Stepper step={step} />
