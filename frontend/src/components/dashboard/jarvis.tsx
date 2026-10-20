@@ -9,6 +9,7 @@ import { TalkingFace, type FaceMood } from "@/components/dashboard/talking-face"
 import { CallScreen, STATUS, ThinkingDots, UndoPill } from "@/components/dashboard/call-screen";
 import { saveChat } from "@/app/dashboard/task-actions";
 import { latinize } from "@/lib/latinize";
+import { correctNames } from "@/lib/name-fix";
 import { isKnowledgeQuestion, knowledgeReply, type PlanInfo } from "@/lib/knowledge";
 import type { MyPlan } from "@/lib/plans";
 import { useSpeech } from "@/lib/use-speech";
@@ -70,6 +71,7 @@ export function Jarvis({
   }, [log, welcome]);
   const greeted = useRef(false);
   const followUp = useRef(0);
+  const misses = useRef(0); // replies in a row that were not understood
   const farewells = useRef(0);
   const [mood, setMood] = useState<FaceMood>("neutral");
   const [ended, setEnded] = useState(false);
@@ -105,7 +107,9 @@ export function Jarvis({
     setConfirm(c);
   };
 
-  const internNames = interns.flatMap((i) => [i.name, i.name.split(" ")[0]]);
+  // Speech-to-text hints: full names only. Adding bare first names ("Anjali", "Ravi") made Sarvam hear
+  // "…allocated to Ravi Teja" as "…allocated to Anjali Sharma" (tested on Sarvam directly); full names got every name right.
+  const internNames = interns.map((i) => i.name);
   const speechRef = useRef<{
     speak: (parts: string[]) => Promise<boolean>;
     unlock: () => void;
@@ -179,7 +183,8 @@ export function Jarvis({
       setMood("neutral");
       setLog((l) => [...l, { from: "you", text: heard }]);
       // Names written in Hindi script ("रवि तेजा") are spelled out in Latin so they match the batch.
-      const text = latinize(heard);
+      // Near-misses of a full name ("Meera Naya", "Ravi Tea", "Raviteja") become the real name before anything reads it.
+      const text = correctNames(latinize(heard), internsRef.current);
       // "Email him" about a task that already exists (also right after "Want me to email Ravi?").
       const emailOrRoute = () => {
         if (looksLikeEmailRequest(text)) void flow.tryEmail(text, convo.current.lastId);
@@ -241,7 +246,21 @@ export function Jarvis({
       }
 
       // Plan and how-to questions ("what's my plan?", "why upgrade?", "how do I message an intern?") come from the knowledge base.
-      const r = (!pendingRef.current && knowledgeReply(text, planRef.current)) || respond(internsRef.current, text, pendingRef.current ?? undefined, convo.current);
+      let r = (!pendingRef.current && knowledgeReply(text, planRef.current)) || respond(internsRef.current, text, pendingRef.current ?? undefined, convo.current);
+      // Not understood: keep the reprompt short, then get more specific (a nudge with names, then an example).
+      if (r.kind === "answer" && r.miss) {
+        misses.current++;
+        const people = internsRef.current.slice(0, 3);
+        const eg = people[0]?.name ?? "Ravi Teja";
+        r =
+          misses.current === 1
+            ? { ...r, text: "Sorry, I didn't catch that. Who should I check on?", chips: [...people.map((i) => `How is ${i.name} doing?`), "What are their tasks?"] }
+            : {
+                ...r,
+                text: `I'm still not getting it. Try a short sentence with a full name, like “What is ${eg}'s task?” or “Who's behind?”`,
+                chips: [`What is ${eg}'s task?`, "Who's behind?", "What can you do?"],
+              };
+      } else misses.current = 0;
       pendingRef.current = r.kind === "clarify" ? r : null;
       convo.current = {
         lastId: (r.kind === "answer" && r.about) || (r.kind === "confirm" && r.fromId) || convo.current.lastId,
@@ -263,7 +282,7 @@ export function Jarvis({
       }
       setChips([...new Set(r.chips ?? SUGGESTIONS)]);
       const n = followUp.current++;
-      const follow = r.offer?.ask ?? (n % 2 === 0 ? FOLLOW_UPS[(n / 2) % FOLLOW_UPS.length] : null);
+      const follow = r.offer?.ask ?? (n % 2 === 0 && !r.miss ? FOLLOW_UPS[(n / 2) % FOLLOW_UPS.length] : null);
       const shown = follow ? `${r.text}${r.text.includes("\n") ? "\n" : " "}${follow}` : r.text;
       void reply(shown, [...[r.speak ?? r.text].flat(), ...(follow ? [follow] : [])], follow ? "question" : "listen");
     },

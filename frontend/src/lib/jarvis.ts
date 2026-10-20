@@ -27,6 +27,8 @@ type Answer = {
   about?: string;
   /** Start the "give someone a task" conversation (optionally for a known intern). */
   startTask?: { internId?: string };
+  /** Nothing matched: the panel turns this into a short reprompt that gets more specific each time. */
+  miss?: boolean;
 };
 type Confirm = { kind: "confirm"; text: string; fromId: string; toId: string };
 export type Reply = Answer | Clarify | Confirm;
@@ -171,6 +173,7 @@ export function respond(
     kind: "answer",
     text: "Sorry, I didn't catch that. You can ask who's behind, how someone is doing, or to move a task.",
     chips: SUGGESTIONS,
+    miss: true,
   };
 }
 

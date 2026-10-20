@@ -6,7 +6,11 @@ import { assignTask, emailTask, sendMessage } from "@/app/dashboard/task-actions
 import type { Intern } from "@/lib/demo-data";
 import { findNames, isNo, isYes, matchInterns, words } from "@/lib/jarvis";
 import { fmtDue, PAST_DATE_ERROR, spokenDate, todayIST } from "@/lib/task-types";
-import { extractTaskIntent } from "@/lib/voice/api";
+import { findDate, parseTaskLocally } from "@/lib/local-intent";
+import { extractTaskIntent, type TaskIntent } from "@/lib/voice/api";
+
+/** How long to wait for the language service before reading the sentence locally. */
+const INTENT_TIMEOUT_MS = 6000;
 
 /** What the confirm card shows. `parts` are joined as-is; bold ones are the names and dates. */
 export type TaskCard = { heading: string; parts: { text: string; bold?: boolean }[] };
@@ -320,15 +324,34 @@ export function useTaskFlow({
       }
 
       const now = new Date();
-      let out;
+      const today = todayIST(now);
+      const names = [...new Set(all.map((i) => i.name))];
+      /** Offline reading of the sentence, used when the language service is slow or down. */
+      const local = (): TaskIntent | null => {
+        if (!d) return parseTaskLocally(text, names, today);
+        // Mid-conversation the sentence answers the question we just asked (who, what, or by when).
+        const who = d.internId ? null : (names.find((n) => text.toLowerCase().includes(n.toLowerCase())) ?? null);
+        const date = findDate(text, today);
+        const title = d.internId && !d.title && !date ? text.trim().replace(/[.!?]+$/, "") : null;
+        return { action: "assign_task", person: who ?? d.personText ?? null, title: title ?? d.title ?? null, due: date?.due ?? d.due ?? null, send_email: d.email ?? null };
+      };
+      let out: TaskIntent | null;
       try {
-        out = await extractTaskIntent(text, await getToken(), {
-          today: todayIST(now),
-          weekday: now.toLocaleDateString("en-IN", { weekday: "long", timeZone: "Asia/Kolkata" }),
-          interns: [...new Set(all.map((i) => i.name))],
-          draft: d ? { person: d.personText ?? null, title: d.title ?? null, due: d.due ?? null, send_email: d.email ?? null } : null,
-        });
+        out = await Promise.race([
+          extractTaskIntent(text, await getToken(), {
+            today,
+            weekday: now.toLocaleDateString("en-IN", { weekday: "long", timeZone: "Asia/Kolkata" }),
+            interns: names,
+            draft: d ? { person: d.personText ?? null, title: d.title ?? null, due: d.due ?? null, send_email: d.email ?? null } : null,
+          }),
+          // A slow language service should not leave the organizer waiting: fall back after a few seconds.
+          new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("timeout")), INTENT_TIMEOUT_MS)),
+        ]);
       } catch {
+        out = local();
+        console.info("[taskora] intent: language service unavailable, read the sentence locally", out);
+      }
+      if (!out) {
         cancel();
         void say("I couldn't reach the language service just now. Please try again in a moment.", undefined, "question");
         return true;
