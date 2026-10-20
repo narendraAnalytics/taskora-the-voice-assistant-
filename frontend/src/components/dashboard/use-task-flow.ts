@@ -11,7 +11,7 @@ import { extractTaskIntent } from "@/lib/voice/api";
 /** What the confirm card shows. `parts` are joined as-is; bold ones are the names and dates. */
 export type TaskCard = { heading: string; parts: { text: string; bold?: boolean }[] };
 type After = "question" | "listen" | "none";
-type Stage = "collect" | "which" | "confirm" | "emailask";
+type Stage = "collect" | "which" | "confirm" | "emailask" | "taskask";
 type Draft = {
   stage: Stage;
   personText?: string;
@@ -25,7 +25,7 @@ type Draft = {
 
 const CANCEL = /^(cancel|never mind|nevermind|forget it|forget that|drop it|stop)$/;
 /** Sounds like handing out new work (not a question, not moving an existing task). */
-const GIVES_WORK = /\b(assign|allocate|allot|give|set|add|create|new task)\b/;
+const GIVES_WORK = /\b(assign|assigned|allocate|allocated|allot|allotted|give|set|add|create|new task)\b/;
 const NOT_NEW = /\b(reassign|move|hand over|shift)\b|['’]s (task|work)\b|^(how|what|who|which|when|why|is|are|does|do)\b/;
 export const looksLikeNewTask = (text: string) => {
   const t = text.toLowerCase();
@@ -37,7 +37,7 @@ const EMAIL_WORDS = /\be-?mail\b|\bmail\b|\bsend\b.*\b(task|it|him|her|them|deta
 export const looksLikeEmailRequest = (text: string) => EMAIL_WORDS.test(text.toLowerCase().replace(/[’']/g, ""));
 
 /** "tell Ravi to finish the login page", "send Anjali a message", "message him that the demo is at 5". */
-const MESSAGE_WORDS = /\b(tell|message|msg|ping|notify|remind)\b|\b(send|drop|leave|write)\b.*\b(message|note|msg)\b|\blet\b.*\bknow\b/;
+const MESSAGE_WORDS = /\b(tell|message|msg|ping|notify|remind)\b|\b(send|drop|leave|write)\b.*\b(message|note|msg)\b|\blet\b.*\bknow\b|\bsend\b.*\bthat\b/;
 const NOT_MESSAGE = /\btell me\b|^(how|what|who|which|when|why|is|are|does|do|show|read)\b|\bsend\b.*\btask\b/;
 export const looksLikeMessageRequest = (text: string) => {
   const t = text.toLowerCase().replace(/[’']/g, "");
@@ -62,6 +62,19 @@ function messageText(original: string, who?: Intern): string {
   if (/^(a |an |the )?(message|note|msg)\b/i.test(rest) || /^(about|regarding)\b/i.test(rest)) return "";
   if (/^to\s+/i.test(rest)) return `Please ${rest.slice(3).trim()}`;
   return rest;
+}
+
+/** A message said as a command ("Tell him the deadline was 27th") loses the command part. */
+function cleanBody(text: string, who?: Intern): string {
+  const t = text.trim();
+  if (/^(tell|ask|message|ping|notify|remind|send)\b/i.test(t)) return messageText(t, who) || t;
+  return t;
+}
+
+/** "Please prepare the landing page." becomes the task title "Prepare the landing page". */
+function taskTitleFrom(text: string): string | null {
+  const m = text.match(/^Please\s+(.{4,120}?)[.!]?$/);
+  return m ? m[1].charAt(0).toUpperCase() + m[1].slice(1) : null;
 }
 
 const channelFrom = (text: string): Channel | null => {
@@ -248,6 +261,18 @@ export function useTaskFlow({
         void say("Say yes to save it, or no to cancel.", undefined, "question");
         return true;
       }
+      if (d?.stage === "taskask") {
+        if (isYes(text)) {
+          askNext({ stage: "collect", internId: d.internId, title: d.title });
+          return true;
+        }
+        draft.current = null;
+        if (isNo(text) || CANCEL.test(t)) {
+          void say("Okay, it stays a message only. Anything else?", undefined, "question");
+          return true;
+        }
+        return false;
+      }
       if (d?.stage === "emailask") {
         if (isYes(text) && d.taskId) {
           const who = all.find((i) => i.id === d.internId);
@@ -392,7 +417,15 @@ export function useTaskFlow({
       const text = r.ok
         ? `${channel === "email" ? `Email sent to ${name}.` : channel === "both" ? `Sent to ${name} as a message and an email.` : `Message sent to ${name}. They will see it on their page.`} Anything else?`
         : `${r.error} Anything else?`;
+      const title = r.ok && channel !== "email" ? taskTitleFrom(d.text) : null;
       if (r.ok) onChange();
+      if (title) {
+        // An instruction ("tell Ravi to prepare X"): offer to put it on the board too, so it shows as his task.
+        draft.current = { stage: "taskask", internId: who.id, title };
+        setChips(["Yes", "No"]);
+        const ask = `${text.replace(" Anything else?", "")} It is not on the board yet. Want me to add "${title}" as a task for ${name}?`;
+        return void say(ask, [ask], "question");
+      }
       void say(text, [text], "question");
     },
     [askMessage, internsRef, onChange, say],
@@ -427,7 +460,7 @@ export function useTaskFlow({
           return true;
         }
         if (d.stage === "text") {
-          askMessage({ ...d, text: text.trim().slice(0, 500) });
+          askMessage({ ...d, text: cleanBody(text, all.find((i) => i.id === d.internId)).slice(0, 500) });
           return true;
         }
         // channel
