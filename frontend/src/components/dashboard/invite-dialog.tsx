@@ -418,7 +418,7 @@ function PlanLimit({ plan, used, onClose }: { plan: MyPlan | undefined; used: nu
         )}
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           {!top && (
-            <a href="/#pricing" className="rounded-full bg-saffron px-6 py-3 text-lg font-bold text-neem shadow-[0_4px_0_#11332a] transition-transform hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
+            <a href="/pricing" className="rounded-full bg-saffron px-6 py-3 text-lg font-bold text-neem shadow-[0_4px_0_#11332a] transition-transform hover:-translate-y-0.5 active:translate-y-1 active:shadow-none">
               {next ? `Upgrade to ${next.name} · ${next.price}` : "See plans"}
             </a>
           )}

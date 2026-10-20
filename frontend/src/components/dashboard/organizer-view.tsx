@@ -232,13 +232,13 @@ export function OrganizerView({ invites, tasks: firstTasks, standups: firstStand
               </span>
               <span className="text-sm text-moss">Active until {new Date(plan.expiresAt!).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
               {list.filter((i) => i.status === "invited" || i.status === "joined").length >= plan.limit && (
-                <a href="/#pricing" className="ml-auto rounded-full bg-neem px-3.5 py-1 text-sm font-bold text-haldi">Upgrade to add more</a>
+                <a href="/pricing" className="ml-auto rounded-full bg-neem px-3.5 py-1 text-sm font-bold text-haldi">Upgrade to add more</a>
               )}
             </>
           ) : (
             <>
               <span className="font-note text-lg">No plan yet. Choose one to add interns.</span>
-              <a href="/#pricing" className="ml-auto rounded-full bg-neem px-3.5 py-1 text-sm font-bold text-haldi">See plans</a>
+              <a href="/pricing" className="ml-auto rounded-full bg-neem px-3.5 py-1 text-sm font-bold text-haldi">See plans</a>
             </>
           )}
         </div>

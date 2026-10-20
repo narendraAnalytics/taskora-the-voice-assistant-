@@ -32,7 +32,7 @@ function PlanPill() {
       {mine.name} plan
     </a>
   ) : (
-    <a href="#pricing" className="inline-flex items-center rounded-full bg-saffron px-3 py-1 text-sm font-bold text-neem ring-2 ring-neem/25 hover:bg-haldi">
+    <a href="/pricing" className="inline-flex items-center rounded-full bg-saffron px-3 py-1 text-sm font-bold text-neem ring-2 ring-neem/25 hover:bg-haldi">
       Choose a plan
     </a>
   );
@@ -103,7 +103,7 @@ export function SiteNav() {
           <a href="#commands" className="hidden font-semibold hover:text-saffron md:inline">
             What you can say
           </a>
-          <a href="#pricing" className="hidden font-semibold hover:text-saffron md:inline">
+          <a href="/pricing" className="hidden font-semibold hover:text-saffron md:inline">
             Pricing
           </a>
           <Show when="signed-out">
