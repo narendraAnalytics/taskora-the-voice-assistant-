@@ -157,7 +157,16 @@ export function Jarvis({
 
   // "Give Ravi the login page by Friday": the task conversation (who, what, by when, save, email).
   const [taskCard, setTaskCard] = useState<TaskCard | null>(null);
-  const flow = useTaskFlow({ internsRef, say: reply, setCard: setTaskCard, setChips, onChange: onTaskChange });
+  const flow = useTaskFlow({
+    internsRef,
+    say: reply,
+    setCard: setTaskCard,
+    setChips,
+    onChange: onTaskChange,
+    remember: (id) => {
+      convo.current = { ...convo.current, lastId: id };
+    },
+  });
 
   const handle = useCallback(
     (text: string) => {
@@ -176,7 +185,9 @@ export function Jarvis({
       // Plan and how-to questions skip the task, message and email flows ("how do I email an intern?" is not an email request).
       if (!confirmRef.current && !flow.active() && !flow.messageActive() && isKnowledgeQuestion(text)) return route(text);
       // "Tell Ravi …": a message to an intern. Taskora asks message or email before sending.
-      if (!confirmRef.current && !flow.active() && (flow.messageActive() || looksLikeMessageRequest(text))) {
+      // A clear new message request wins over a half-finished task conversation, so nothing gets stuck.
+      if (!confirmRef.current && (flow.messageActive() || looksLikeMessageRequest(text))) {
+        if (flow.active()) flow.cancel();
         void flow.tryMessage(text, convo.current.lastId);
         return;
       }

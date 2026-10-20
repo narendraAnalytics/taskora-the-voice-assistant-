@@ -60,6 +60,8 @@ function messageText(original: string, who?: Intern): string {
   }
   if (!rest) rest = original.replace(/^.*?\b(him|her|them)\b/i, "");
   rest = rest.replace(/^[\s,:-]+/, "").trim();
+  // "... and send a message" is the request itself, not the message.
+  rest = rest.replace(/^((and|then|also|please)\s+)*(send|give|drop|leave|write)\s+((him|her|them)\s+)?((a|an|the)\s+)?(message|note|msg)\b[\s,:.-]*/i, "").trim();
   if (/^(a |an |the )?(message|note|msg)\b/i.test(rest) || /^(about|regarding)\b/i.test(rest)) return "";
   if (/^to\s+/i.test(rest)) return `Please ${rest.slice(3).trim()}`;
   return rest;
@@ -101,12 +103,15 @@ export function useTaskFlow({
   setCard,
   setChips,
   onChange,
+  remember,
 }: {
   internsRef: RefObject<Intern[]>;
   say: (shown: string, spoken?: string[], after?: After) => void | Promise<void>;
   setCard: (c: TaskCard | null) => void;
   setChips: (c: string[]) => void;
   onChange: () => void;
+  /** Tell the avatar who we are talking about now, so "him" / "her" mean this intern. */
+  remember?: (internId: string) => void;
 }) {
   const { getToken } = useAuth();
   const draft = useRef<Draft | null>(null);
@@ -137,6 +142,7 @@ export function useTaskFlow({
         setChips(chips);
         void say(`${lead}${q}`, [`${lead}${q}`], "question");
       };
+      if (who) remember?.(who.id);
       if (!who) return ask("Who should I give it to?", all.slice(0, 4).map((i) => i.name));
       if (!d.title) return ask(`What is the task for ${shortName(who, all)}?`);
       if (!d.due) return ask("By when?", ["Today", "Tomorrow", "Friday"]);
@@ -234,6 +240,7 @@ export function useTaskFlow({
         reply("Who should I email? Say their name.");
         return true;
       }
+      remember?.(who.id);
       const name = shortName(who, all);
       if (!who.taskId) {
         reply(`${name} has no task allocated yet, so there is nothing to email. Want to allocate one?`);
@@ -390,9 +397,12 @@ export function useTaskFlow({
         d.stage = "who";
         return ask("Who should I message?", all.slice(0, 4).map((i) => i.name));
       }
+      remember?.(who.id);
       if (!d.text) {
         d.stage = "text";
-        return ask(`What should I say to ${shortName(who, all)}?`);
+        // An intern who has a task gets a one-tap suggestion, so a short "tell him about the task" is easy.
+        const idea = who.taskId ? [`Your task “${who.task}” is on your board. Please check it.`] : [];
+        return ask(`What should I say to ${shortName(who, all)}?`, idea);
       }
       d.stage = "channel";
       const shown = `Send "${d.text}" to ${shortName(who, all)} as a message on their page, or as an email?`;
