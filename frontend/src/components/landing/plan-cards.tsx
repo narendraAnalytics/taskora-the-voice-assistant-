@@ -118,7 +118,7 @@ export function PlanCards() {
               <p className={p.featured ? "text-neem/80" : "text-moss"}>{p.fit}</p>
               <p className="mt-6 flex items-baseline gap-2">
                 <span className="display-wide text-5xl">{p.price}</span>
-                <span className={p.featured ? "text-neem/80" : "text-moss"}>{p.period}</span>
+                {p.period && <span className={p.featured ? "text-neem/80" : "text-moss"}>{p.period}</span>}
               </p>
               <ul className="mt-6 flex-1 space-y-2.5">
                 {p.features.map((f) => (
@@ -148,7 +148,6 @@ export function PlanCards() {
           {note.text}
         </p>
       )}
-      <p className="font-note mt-4 text-sm text-moss">Payments run in Razorpay test mode for now: use test card 4111 1111 1111 1111 with any future date and CVV, or UPI success@razorpay.</p>
     </>
   );
 }

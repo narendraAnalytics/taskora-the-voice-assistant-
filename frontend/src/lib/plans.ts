@@ -22,7 +22,7 @@ export const PLANS: Plan[] = [
     rupees: 150,
     members: 2,
     price: "₹150",
-    period: "for 30 days, to test",
+    period: "",
     fit: "To try Taskora with your first two interns",
     features: ["1 team, up to 2 interns", "Voice tasks and standups", "Team board and history"],
   },
