@@ -26,7 +26,8 @@ type Draft = {
 const CANCEL = /^(cancel|never mind|nevermind|forget it|forget that|drop it|stop)$/;
 /** Sounds like handing out new work (not a question, not moving an existing task). */
 const GIVES_WORK = /\b(assign|assigned|allocate|allocated|allot|allotted|give|set|add|create|new task)\b/;
-const NOT_NEW = /\b(reassign|move|hand over|shift)\b|['’]s (task|work)\b|^(how|what|who|which|when|why|is|are|does|do)\b/;
+const NOT_NEW =
+  /\b(reassign|move|hand over|shift)\b|['’]s (task|work)\b|^(how|what|who|which|when|why|is|are|does|do|any|anything|show|list|brief|did|have|has|was|were)\b|^(tell|give|can you tell|please tell) me\b|\btasks? (is |are |was |were )?(allocated|assigned)\b|\b(allocated|assigned) (tasks?|work)\b/;
 export const looksLikeNewTask = (text: string) => {
   const t = text.toLowerCase();
   return GIVES_WORK.test(t) && !NOT_NEW.test(t);

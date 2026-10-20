@@ -1,4 +1,4 @@
-import { STATUS_LABEL, type Intern } from "./demo-data";
+import { STATUS_LABEL, type Intern, type InternTask } from "./demo-data";
 import { agoText, spokenDate, todayIST } from "./task-types";
 
 /*
@@ -31,7 +31,7 @@ type Answer = {
 type Confirm = { kind: "confirm"; text: string; fromId: string; toId: string };
 export type Reply = Answer | Clarify | Confirm;
 
-export const SUGGESTIONS = ["Allocate a task", "How many interns do I have?", "What are their tasks?", "Who's behind?", "What's due today?"];
+export const SUGGESTIONS = ["Allocate a task", "How many interns do I have?", "What are their tasks?", "Who's behind?", "What's my plan?"];
 
 const first = (s: string) => s.split(" ")[0];
 export const words = (text: string) =>
@@ -173,12 +173,18 @@ export function respond(
 }
 
 /** "due today", "due Friday 23 October", "was due Friday 16 October", "no deadline" */
-function dueText(i: Intern) {
-  if (!i.dueDate) return "no deadline";
+function dueFor(dueDate: string | null | undefined) {
+  if (!dueDate) return "no deadline";
   const today = todayIST();
-  if (i.dueDate === today) return "due today";
-  return `${i.dueDate < today ? "was due" : "due"} ${spokenDate(i.dueDate)}`;
+  if (dueDate === today) return "due today";
+  return `${dueDate < today ? "was due" : "due"} ${spokenDate(dueDate)}`;
 }
+const dueText = (i: Intern) => dueFor(i.dueDate);
+
+/** Every task of one intern, for the screen (one line each) and for speech (one sentence each). */
+const taskShow = (t: InternTask) => `• ${t.title}: ${STATUS_LABEL[t.status]}, ${dueFor(t.dueDate)}${t.note ? `. Latest update: “${t.note}”` : ""}`;
+const taskSay = (t: InternTask) => `${t.title} is ${STATUS_LABEL[t.status].toLowerCase()}, ${dueFor(t.dueDate)}${t.note ? `. Latest update: ${t.note}` : ""}.`;
+const manyTasks = (i: Intern) => (i.tasks?.length ?? 0) > 1;
 const listNames = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}` : (xs[0] ?? ""));
 
 const NO_TASK = "No task allocated yet.";
@@ -224,6 +230,7 @@ function updatesReply(interns: Intern[], t: string): Reply {
 function personLine(i: Intern, all: Intern[]) {
   const n = short(i, all);
   if (!hasTask(i)) return `${n} has no task allocated yet.`;
+  if (manyTasks(i)) return `${n} has ${i.tasks!.length} tasks. ${i.tasks!.map(taskSay).join(" ")}`;
   switch (i.status) {
     case "done":
       return `${n} has finished ${i.task}.`;
@@ -239,9 +246,11 @@ function personLine(i: Intern, all: Intern[]) {
 }
 /** Screen line per person: everything we know. */
 const detailLine = (i: Intern) =>
-  hasTask(i)
-    ? `${i.name}: ${i.task}${i.more ? ` (+${i.more} more)` : ""}, ${STATUS_LABEL[i.status].toLowerCase()}, ${dueText(i)}.`
-    : `${i.name}: ${NO_TASK.toLowerCase()}`;
+  !hasTask(i)
+    ? `${i.name}: ${NO_TASK.toLowerCase()}`
+    : manyTasks(i)
+      ? `${i.name} has ${i.tasks!.length} tasks:\n${i.tasks!.map(taskShow).join("\n")}`
+      : `${i.name}: ${i.task}, ${STATUS_LABEL[i.status].toLowerCase()}, ${dueText(i)}.${i.update ? ` Latest update: “${i.update}”` : ""}`;
 /** Spoken sentences grouped two at a time, so the first clip is short and starts quickly. */
 const pairs = (xs: string[]) => xs.reduce<string[]>((acc, s, k) => (k % 2 ? [...acc.slice(0, -1), `${acc.at(-1)} ${s}`] : [...acc, s]), []);
 
@@ -258,7 +267,7 @@ function teamQuestion(interns: Intern[], t: string): Reply | null {
   }
 
   // A full briefing on everyone, first to last, or the list of tasks.
-  if (/(brief|rundown|run me through|walk me through|everyone|every one|all (the )?details|each (intern|person|one|member)|full (report|details|picture|update)|tell me (about|everything about) (the|my) (team|batch|interns)|details of (all|everyone|the team|my team)|who is doing what|whos doing what|what is everyone|(what|which) (are|is) (their|the|each|every).*tasks?|(their|each|every|all|the) tasks?|tasks? (of|for) (everyone|all|each|them)|(list|show|tell me) .*tasks?)/.test(t)) {
+  if (/(brief|rundown|allocated|assigned|any tasks?|all tasks?|task status|status of (the |all )?tasks?|work details|details of (the )?work|run me through|walk me through|everyone|every one|all (the )?details|each (intern|person|one|member)|full (report|details|picture|update)|tell me (about|everything about) (the|my) (team|batch|interns)|details of (all|everyone|the team|my team)|who is doing what|whos doing what|what is everyone|(what|which) (are|is) (their|the|each|every).*tasks?|(their|each|every|all|the) tasks?|tasks? (of|for) (everyone|all|each|them)|(list|show|tell me) .*tasks?)/.test(t)) {
     const idle = interns.find((i) => !hasTask(i));
     if (!tasked.length) {
       return {
@@ -356,7 +365,15 @@ function teamQuestion(interns: Intern[], t: string): Reply | null {
 function behind(interns: Intern[]): Reply {
   const late = interns.filter(isBehind);
   if (!late.length) {
-    return { kind: "answer", text: "Nobody is behind. Everyone is on track.", chips: ["Team status", ...interns.slice(0, 2).map((i) => howIs(i, interns))] };
+    const idle = interns.filter((i) => !i.taskId).length;
+    const text = !interns.length
+      ? "Nobody is behind. There are no interns yet."
+      : idle === interns.length
+        ? "Nobody is behind, but nobody has a task yet."
+        : idle
+          ? `Nobody is behind. ${idle} ${idle === 1 ? "intern has" : "interns have"} no task yet; everyone else is on track.`
+          : "Nobody is behind. Everyone is on track.";
+    return { kind: "answer", text, chips: ["Team status", ...interns.slice(0, 2).map((i) => howIs(i, interns))] };
   }
   const count = late.length === 1 ? "One person is" : `${late.length} people are`;
   // Suggest the most useful next step: move an overdue task to someone with room, else details.
@@ -394,9 +411,19 @@ function describe(interns: Intern[], i: Intern): Reply {
     : others.length
       ? { ask: `Should I check on ${short(others[0], interns)} too?`, run: `how is ${others[0].name} doing` }
       : { ask: "Should I check on anyone else?" };
+  if (manyTasks(i)) {
+    return {
+      kind: "answer",
+      text: `${i.name} has ${i.tasks!.length} tasks:\n${i.tasks!.map(taskShow).join("\n")}`,
+      speak: [`${short(i, interns)} has ${i.tasks!.length} tasks.`, ...i.tasks!.map(taskSay)],
+      offer,
+      about: i.id,
+      chips: [...others.slice(0, 2).map((x) => howIs(x, interns)), "Who's behind?", "Team status"].slice(0, 3),
+    };
+  }
   return {
     kind: "answer",
-    text: `${i.name} is ${STATUS_LABEL[i.status].toLowerCase()} on ${i.task}${i.more ? ` (+${i.more} more)` : ""}, ${dueText(i)}.${i.update ? ` Last update ${i.updatedAt}: ${i.update}` : ""}`,
+    text: `${i.name} is ${STATUS_LABEL[i.status].toLowerCase()} on ${i.task}, ${dueText(i)}.${i.update ? ` Last update ${i.updatedAt}: ${i.update}` : ""}`,
     speak: `${personLine(i, interns).slice(0, -1)}${i.status === "done" ? "" : `, ${dueText(i)}`}.${i.update ? ` Latest update: ${i.update}` : ""}`,
     offer,
     about: i.id,
@@ -493,8 +520,15 @@ export const isWait = (text: string) =>
 export function greeting(name: string, interns: Intern[] = [], hour = new Date().getHours()) {
   const part = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const late = interns.filter(isBehind).length;
-  const glance = interns.length
-    ? ` You have ${interns.length} interns, and ${late ? `${late} ${late === 1 ? "needs" : "need"} your attention` : "everyone is on track"}.`
-    : "";
+  const idle = interns.filter((i) => !i.taskId).length;
+  // "On track" is only said when everyone actually has a task and nobody is behind.
+  const status = late
+    ? `${late} ${late === 1 ? "needs" : "need"} your attention`
+    : idle === interns.length
+      ? "nobody has a task yet"
+      : idle
+        ? `${idle} still ${idle === 1 ? "has" : "have"} no task`
+        : "everyone is on track";
+  const glance = interns.length ? ` You have ${interns.length} ${interns.length === 1 ? "intern" : "interns"}, and ${status}.` : "";
   return `${part}, ${name}! I'm Taskora, your batch coordinator.${glance} Ask me anything about your team. What would you like to know?`;
 }

@@ -8,6 +8,8 @@ import { Tape } from "@/components/dashboard/motion";
 import { TalkingFace, type FaceMood } from "@/components/dashboard/talking-face";
 import { CallScreen, STATUS, ThinkingDots, UndoPill } from "@/components/dashboard/call-screen";
 import { saveChat } from "@/app/dashboard/task-actions";
+import { isKnowledgeQuestion, knowledgeReply, type PlanInfo } from "@/lib/knowledge";
+import type { MyPlan } from "@/lib/plans";
 import { useSpeech } from "@/lib/use-speech";
 import { closingKind, goodbye, greeting, isNo, isRepeat, isWait, isYes, respond, SUGGESTIONS, type Ctx, type Reply } from "@/lib/jarvis";
 import type { Intern } from "@/lib/demo-data";
@@ -34,6 +36,7 @@ const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
 export function Jarvis({
   name,
   savedChat = [],
+  plan,
   interns,
   onReassign,
   onTaskChange,
@@ -41,6 +44,8 @@ export function Jarvis({
   name: string;
   /** The chat saved in Neon, so it survives sign out. Only the eraser button clears it. */
   savedChat?: Msg[];
+  /** The organizer's plan, so the avatar can explain it and what upgrading gets them. */
+  plan?: MyPlan;
   interns: Intern[];
   onReassign: (fromId: string, toId: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   /** Called after Taskora saves a task, so the board reloads. */
@@ -78,6 +83,7 @@ export function Jarvis({
 
   // Refs for everything the async conversation loop reads, so it never sees stale state.
   const internsRef = useRef(interns);
+  const planRef = useRef<PlanInfo>({ plan: null, limit: 0, used: 0, expiresAt: null });
   const mutedRef = useRef(muted);
   const confirmRef = useRef<Confirm | null>(null);
   const pendingRef = useRef<Pending | null>(null);
@@ -89,9 +95,10 @@ export function Jarvis({
   const last = useRef<{ shown: string; spoken: string[] } | null>(null);
   useEffect(() => {
     internsRef.current = interns;
+    planRef.current = { plan: plan?.plan ?? null, limit: plan?.limit ?? 0, used: interns.length, expiresAt: plan?.expiresAt ?? null };
     mutedRef.current = muted;
     handsFreeRef.current = handsFree;
-  }, [interns, muted, handsFree]);
+  }, [interns, plan, muted, handsFree]);
   const setConfirmBoth = (c: Confirm | null) => {
     confirmRef.current = c;
     setConfirm(c);
@@ -166,6 +173,8 @@ export function Jarvis({
         if (looksLikeEmailRequest(text)) void flow.tryEmail(text, convo.current.lastId);
         else route(text);
       };
+      // Plan and how-to questions skip the task, message and email flows ("how do I email an intern?" is not an email request).
+      if (!confirmRef.current && !flow.active() && !flow.messageActive() && isKnowledgeQuestion(text)) return route(text);
       // "Tell Ravi …": a message to an intern. Taskora asks message or email before sending.
       if (!confirmRef.current && !flow.active() && (flow.messageActive() || looksLikeMessageRequest(text))) {
         void flow.tryMessage(text, convo.current.lastId);
@@ -215,7 +224,8 @@ export function Jarvis({
         return void reply(hadConfirm ? `Okay, nothing changed. ${bye}` : bye);
       }
 
-      const r = respond(internsRef.current, text, pendingRef.current ?? undefined, convo.current);
+      // Plan and how-to questions ("what's my plan?", "why upgrade?", "how do I message an intern?") come from the knowledge base.
+      const r = (!pendingRef.current && knowledgeReply(text, planRef.current)) || respond(internsRef.current, text, pendingRef.current ?? undefined, convo.current);
       pendingRef.current = r.kind === "clarify" ? r : null;
       convo.current = {
         lastId: (r.kind === "answer" && r.about) || (r.kind === "confirm" && r.fromId) || convo.current.lastId,
@@ -357,7 +367,7 @@ export function Jarvis({
     setHandsFree((h) => !h);
     if (listening && handsFree) cancel();
   };
-  const hint = error ?? notice ?? (ended || napping ? "Tap my face whenever you need me." : "Talk to it like Jarvis. It knows your whole batch.");
+  const hint = error ?? notice ?? (ended || napping ? "Tap my face whenever you need me." : "Ask me anything about your interns, tasks and plan. I know your whole batch.");
 
   return (
     <section

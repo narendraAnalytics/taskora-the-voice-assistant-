@@ -73,6 +73,9 @@ function fromInvites(invites: Invite[], tasks: TaskView[], notes: StandupView[])
         due: t?.dueDate ? fmtDue(t.dueDate) : "—",
         update: note?.text ?? "",
         updatedAt: note ? ago(note.createdAt) : "",
+        tasks: [...mine]
+          .sort((a, b) => (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999"))
+          .map((x) => ({ id: x.id, title: x.title, status: x.status, dueDate: x.dueDate, note: notes.find((n) => n.taskId === x.id)?.text ?? null })),
         updates: notes.filter((n) => n.inviteId === i.id).map((n) => ({ task: n.taskTitle, text: n.text, status: n.status, at: n.createdAt })),
         taskId: t?.id,
         dueDate: t?.dueDate ?? null,
@@ -277,7 +280,7 @@ export function OrganizerView({ invites, tasks: firstTasks, standups: firstStand
       </AnimatePresence>
       <div className="grid gap-5 lg:grid-cols-12">
         <PaperCard i={0} tilt={-1.5} className="lg:col-span-7">
-          <Jarvis name="Team" savedChat={chat} interns={interns} onReassign={reassign} onTaskChange={refreshTasks} />
+          <Jarvis name="Team" savedChat={chat} plan={plan} interns={interns} onReassign={reassign} onTaskChange={refreshTasks} />
         </PaperCard>
 
         <StatCards interns={interns} invited={list.filter((i) => i.status === "invited").length} />

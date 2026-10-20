@@ -31,12 +31,31 @@ export type SpeechOptions = {
 
 const CACHE_MAX = 40;
 
-/** First sentence on its own (it plays first), the rest together. */
+const CHUNK_MIN = 40;
+
+/**
+ * Split a reply into clips of roughly one or two sentences (at least ~40 characters each). Every clip is
+ * made at the same time, so while the first one plays the others are already ready. A tiny first clip
+ * ("Good morning, Team!") followed by one long clip left a pause while the long one was still being made.
+ */
 export function splitForSpeech(text: string): string[] {
   const t = text.trim();
-  const m = t.match(/^([\s\S]+?[.!?])\s+([\s\S]+)$/);
-  if (!m || m[1].length < 12) return t ? [t] : [];
-  return [m[1], m[2]];
+  if (!t) return [];
+  const sentences = t.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g)?.map((s) => s.trim()).filter(Boolean) ?? [t];
+  const clips: string[] = [];
+  let cur = "";
+  for (const s of sentences) {
+    cur = cur ? `${cur} ${s}` : s;
+    if (cur.length >= CHUNK_MIN) {
+      clips.push(cur);
+      cur = "";
+    }
+  }
+  if (cur) {
+    if (clips.length && cur.length < 12) clips[clips.length - 1] += ` ${cur}`;
+    else clips.push(cur);
+  }
+  return clips;
 }
 
 export function useSpeech(onFinal?: (text: string) => void, maxSeconds = 20, keyterms: string[] = [], options: SpeechOptions = {}) {

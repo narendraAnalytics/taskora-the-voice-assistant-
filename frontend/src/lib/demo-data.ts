@@ -5,7 +5,12 @@ export type Status = "todo" | "progress" | "blocked" | "done" | "overdue";
 /** One thing an intern wrote about a task (newest first on `Intern.updates`). */
 export type InternUpdate = { task: string; text: string; status: "todo" | "progress" | "blocked" | "done"; at: string };
 
+/** One of an intern's tasks, with the latest note they wrote on it. */
+export type InternTask = { id: string; title: string; status: Status; dueDate: string | null; note: string | null };
+
 export type Intern = {
+  /** Every task this intern has, nearest deadline first (the board only shows the main one). */
+  tasks?: InternTask[];
   id: string;
   name: string;
   aliases: string[];
