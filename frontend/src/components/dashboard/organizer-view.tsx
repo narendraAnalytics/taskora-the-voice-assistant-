@@ -14,6 +14,7 @@ import { Avatar, StatusChip } from "@/components/dashboard/status-chip";
 import { Shell } from "@/components/dashboard/shell";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { GrowBar, PaperCard, Tape } from "@/components/dashboard/motion";
+import { ScrollFeed } from "@/components/dashboard/scroll-feed";
 import { cn } from "@/lib/utils";
 
 const card = "rounded-[2rem] bg-paper-deep/70 p-5 ring-1 ring-neem/10 backdrop-blur-sm sm:p-6";
@@ -148,6 +149,8 @@ function ReplyBox({ s, onSent, joined }: { s: StandupView; onSent: (m: MessageVi
 
 export function OrganizerView({ invites, tasks: firstTasks, standups: firstStandups, messages: firstMessages = [] }: { name?: string; invites: Invite[]; tasks: TaskView[]; standups: StandupView[]; messages?: MessageView[] }) {
   const [sent, setSent] = useState(firstMessages);
+  const feedRoot = useRef<HTMLDivElement>(null);
+  const [who, setWho] = useState<string>("all");
   const [list, setList] = useState(invites);
   const [taskList, setTaskList] = useState(firstTasks);
   // The board is always derived from the real invites and tasks, so it follows every change.
@@ -360,15 +363,36 @@ export function OrganizerView({ invites, tasks: firstTasks, standups: firstStand
               Nothing yet. When an intern writes an update on a task, it shows up here.
             </p>
           )}
-          <ul className="mt-5 space-y-4">
-            {standups.slice(0, 8).map((s, n) => (
+          {standups.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter updates by intern">
+              {[["all", "All"], ...[...new Map(standups.map((x) => [x.inviteId, x.internName.split(" ")[0]])).entries()]].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={who === id}
+                  onClick={() => {
+                    setWho(id);
+                    feedRoot.current?.scrollTo({ top: 0 });
+                  }}
+                  className={cn("rounded-full px-3 py-1 text-xs font-bold transition-colors", who === id ? "bg-neem text-haldi" : "bg-paper ring-1 ring-neem/20 hover:bg-haldi")}
+                >
+                  {label}
+                </button>
+              ))}
+              <span className="font-note ml-auto text-xs text-moss">{standups.filter((x) => who === "all" || x.inviteId === who).length} updates</span>
+            </div>
+          )}
+          <ScrollFeed root={feedRoot} className="mt-4 max-h-[34rem] -mx-1 px-1 pb-6 pt-3">
+          <ul className="space-y-4">
+            {standups.filter((x) => who === "all" || x.inviteId === who).map((s, n) => (
               <motion.li
                 key={s.id}
                 layout={!reduce}
-                initial={reduce ? false : { opacity: 0, y: 16, rotate: n % 2 ? 2 : -2 }}
-                animate={{ opacity: 1, y: 0, rotate: n % 2 ? 0.6 : -0.6 }}
+                initial={reduce ? false : { opacity: 0, y: 24, rotate: n % 2 ? 2 : -2 }}
+                whileInView={{ opacity: 1, y: 0, rotate: n % 2 ? 0.6 : -0.6 }}
+                viewport={{ root: feedRoot, once: true, margin: "0px 0px -8% 0px" }}
                 whileHover={reduce ? undefined : { rotate: 0, y: -3, scale: 1.015 }}
-                transition={{ type: "spring", stiffness: 200, damping: 16, delay: 0.7 + n * 0.08 }}
+                transition={{ type: "spring", stiffness: 200, damping: 16, delay: Math.min(n, 4) * 0.07 }}
                 className={cn("relative rounded-2xl p-3.5 shadow-[0_3px_0_#173f3014]", s.status === "blocked" ? "bg-kumkum text-paper" : "bg-paper")}
               >
                 {n === 0 && <Tape className="-top-3 right-8" />}
@@ -396,6 +420,7 @@ export function OrganizerView({ invites, tasks: firstTasks, standups: firstStand
               </motion.li>
             ))}
           </ul>
+          </ScrollFeed>
         </PaperCard>
       </div>
     </Shell>

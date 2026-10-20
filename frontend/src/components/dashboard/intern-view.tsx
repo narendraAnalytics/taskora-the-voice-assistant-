@@ -9,6 +9,7 @@ import { StatusChip } from "@/components/dashboard/status-chip";
 import { Shell } from "@/components/dashboard/shell";
 import { motion, useReducedMotion } from "framer-motion";
 import { PaperCard, Tape } from "@/components/dashboard/motion";
+import { ScrollFeed } from "@/components/dashboard/scroll-feed";
 import { cn } from "@/lib/utils";
 
 const MAX = 400;
@@ -113,6 +114,7 @@ type Sent = { id: number; task: string; status: UpdateStatus; text: string };
 export function InternView({ name, profile, tasks: firstTasks = [], messages: firstMessages = [] }: { name: string; profile?: InternProfile | null; tasks?: TaskView[]; messages?: MessageView[] }) {
   const reduce = useReducedMotion();
   const [messages, setMessages] = useState(firstMessages);
+  const msgRoot = useRef<HTMLDivElement>(null);
   // Messages the organizer sends while this page is open appear without a reload.
   useEffect(() => {
     const load = async () => {
@@ -347,9 +349,16 @@ export function InternView({ name, profile, tasks: firstTasks = [], messages: fi
             {messages.length === 0 ? (
               <p className="font-note mt-3 rounded-2xl bg-paper px-4 py-5 text-center text-moss">No messages yet. When your organizer writes to you, it shows up here.</p>
             ) : (
-              <ul className="mt-4 max-h-96 space-y-3 overflow-y-auto pr-1" aria-live="polite">
-                {messages.slice(0, 10).map((m, n) => (
-                  <motion.li key={m.id} initial={reduce ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl bg-paper p-3.5 shadow-[0_3px_0_#173f3014]">
+              <ScrollFeed root={msgRoot} className="mt-3 max-h-96 pb-6 pt-2">
+              <ul className="space-y-3" aria-live="polite">
+                {messages.map((m, n) => (
+                  <motion.li
+                    key={m.id}
+                    initial={reduce ? false : { opacity: 0, y: 18 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ root: msgRoot, once: true, margin: "0px 0px -8% 0px" }}
+                    transition={{ delay: Math.min(n, 4) * 0.06 }}
+                    className="rounded-2xl bg-paper p-3.5 shadow-[0_3px_0_#173f3014]">
                     {m.taskTitle && <p className="truncate text-xs font-bold text-moss">About: {m.taskTitle}</p>}
                     <p className="font-note mt-0.5 whitespace-pre-line text-[1.02rem] leading-snug">{m.text}</p>
                     <p suppressHydrationWarning className="mt-1.5 text-xs text-moss">
@@ -359,6 +368,7 @@ export function InternView({ name, profile, tasks: firstTasks = [], messages: fi
                   </motion.li>
                 ))}
               </ul>
+              </ScrollFeed>
             )}
           </PaperCard>
           {profile && <Placement p={profile} />}
