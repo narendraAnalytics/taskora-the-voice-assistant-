@@ -112,14 +112,16 @@ export function respond(
   }
 
   // Answer to an earlier "which one?" question.
-  if (pending) {
+  if (pending && pending.options.length) {
     const pick = pending.options.find((o) => t.includes(o.name.toLowerCase()) || o.aliases.some((a) => a !== first(o.name).toLowerCase() && t.includes(a)));
     if (!pick) return { kind: "clarify", text: `Sorry, which one: ${pending.options.map((o) => o.name).join(" or ")}?`, options: pending.options, then: pending.then };
     if (pending.then.type === "lookup") return describe(interns, pick);
     return { kind: "answer", text: `Okay, ${pick.name}. Say the reassignment again with their full name.`, about: pick.id };
   }
 
-  if (/(reassign|give|move|hand over|assign|shift)/.test(t) && /\bto\b/.test(t)) {
+  // A move names two people ("move Anjali's task to Priya"). "Which task is assigned to Ravi Teja?" names one, so it is
+  // a question about him and falls through to the answers below.
+  if (/(reassign|give|move|hand over|assign|shift)/.test(t) && /\bto\b/.test(t) && findNames(interns, t.split(/\bto\b/)[0]).length) {
     const [fromPart, toPart] = [t.split(/\bto\b/)[0], t.split(/\bto\b/).slice(1).join(" to ")];
     const from = findNames(interns, fromPart);
     const to = findNames(interns, toPart);
@@ -127,7 +129,7 @@ export function respond(
       const exact = list.filter((x) => spoken.includes(x.i.name.toLowerCase()));
       if (exact.length === 1) return { one: exact[0].i };
       const many = (exact.length ? exact : list).map((x) => x.i);
-      return many.length === 1 ? { one: many[0] } : { many };
+      return many.length === 1 ? { one: many[0] } : many.length > 1 ? { many } : {};
     };
     const f = pickOne(from, fromPart);
     const g = pickOne(to, toPart);

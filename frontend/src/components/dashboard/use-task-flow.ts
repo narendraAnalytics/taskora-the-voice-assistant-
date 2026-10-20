@@ -444,6 +444,23 @@ export function useTaskFlow({
 
   const messageActive = useCallback(() => msg.current !== null, []);
 
+  /** "Task allocated to Ravi Teja." said as a statement: begin giving that intern a task (asks what and by when). */
+  const tryAllocateStatement = useCallback(
+    (text: string): boolean => {
+      const t = words(text);
+      const m = t.match(/^((a|the|new) )*tasks? ((is|was|has been|have been) )?(given|allocated|assigned|allotted) to (.+)$/);
+      if (!m) return false;
+      const all = internsRef.current ?? [];
+      const named = findNames(all, m[6]);
+      const exact = named.filter((x) => m[6].includes(x.i.name.toLowerCase()));
+      const pool = exact.length ? exact : named;
+      if (pool.length !== 1) return false;
+      askNext({ stage: "collect", internId: pool[0].i.id }, "Sure. ");
+      return true;
+    },
+    [askNext, internsRef],
+  );
+
   const tryMessage = useCallback(
     async (text: string, lastId?: string): Promise<boolean> => {
       const all = internsRef.current ?? [];
@@ -471,6 +488,8 @@ export function useTaskFlow({
           return true;
         }
         if (d.stage === "text") {
+          // A stray "." or a single letter from the microphone is not a message.
+          if (!/[\p{L}\p{N}]{2,}/u.test(text)) return void askMessage(d, "I didn't catch that. "), true;
           askMessage({ ...d, text: cleanBody(text, all.find((i) => i.id === d.internId)).slice(0, 500) });
           return true;
         }
@@ -506,5 +525,5 @@ export function useTaskFlow({
     msg.current = null;
   }, []);
 
-  return { tryHandle, tryEmail, tryMessage, messageActive, cancelMessage, start, yes, no, cancel, active: () => draft.current !== null };
+  return { tryHandle, tryEmail, tryMessage, tryAllocateStatement, messageActive, cancelMessage, start, yes, no, cancel, active: () => draft.current !== null };
 }

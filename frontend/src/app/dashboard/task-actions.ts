@@ -89,7 +89,12 @@ export async function getStandups(): Promise<StandupView[]> {
 const messageSchema = z.object({
   inviteId: z.uuid(),
   taskId: z.uuid().nullable(),
-  text: z.string().trim().min(1, "Write a message first.").max(500, "Keep it under 500 characters."),
+  text: z
+    .string()
+    .trim()
+    .min(1, "Write a message first.")
+    .max(500, "Keep it under 500 characters.")
+    .refine((v) => /[\p{L}\p{N}]{2,}/u.test(v), "Write a few words first."),
   channel: z.enum(["app", "email", "both"]).default("app"),
 });
 

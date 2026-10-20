@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     # Model ids live here only, so a Sarvam model change is a one-line edit.
     stt_model: str = "saaras:v4"
     stt_mode: str = "codemix"
+    # The language spoken to the app. English only for now, so names like "Ravi Teja" come back in Latin letters
+    # (not "रवि तेजा"). Set STT_LANGUAGE to "" to let Sarvam detect the language again.
+    stt_language: str = "en-IN"
     # Intent extraction (chat). Check the Sarvam changelog: chat model names change.
     chat_model: str = "sarvam-105b"
     tts_model: str = "bulbul:v4-flash"

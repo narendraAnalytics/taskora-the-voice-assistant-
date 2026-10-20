@@ -54,6 +54,7 @@ async def speech_to_text(
             filename=audio.filename or "audio.wav",
             content_type=audio.content_type or "audio/wav",
             keyterms=terms,
+            language_code=cfg.stt_language or None,
         )
     except SarvamError as e:
         log.warning("sarvam_stt_failed", status=e.status, detail=e.detail)

@@ -8,6 +8,7 @@ import { Tape } from "@/components/dashboard/motion";
 import { TalkingFace, type FaceMood } from "@/components/dashboard/talking-face";
 import { CallScreen, STATUS, ThinkingDots, UndoPill } from "@/components/dashboard/call-screen";
 import { saveChat } from "@/app/dashboard/task-actions";
+import { latinize } from "@/lib/latinize";
 import { isKnowledgeQuestion, knowledgeReply, type PlanInfo } from "@/lib/knowledge";
 import type { MyPlan } from "@/lib/plans";
 import { useSpeech } from "@/lib/use-speech";
@@ -169,19 +170,23 @@ export function Jarvis({
   });
 
   const handle = useCallback(
-    (text: string) => {
+    (heard: string) => {
       speechRef.current.unlock();
       holdRef.current = false;
       endedRef.current = false;
       setEnded(false);
       setNapping(false);
       setMood("neutral");
-      setLog((l) => [...l, { from: "you", text }]);
+      setLog((l) => [...l, { from: "you", text: heard }]);
+      // Names written in Hindi script ("रवि तेजा") are spelled out in Latin so they match the batch.
+      const text = latinize(heard);
       // "Email him" about a task that already exists (also right after "Want me to email Ravi?").
       const emailOrRoute = () => {
         if (looksLikeEmailRequest(text)) void flow.tryEmail(text, convo.current.lastId);
         else route(text);
       };
+      // "Task allocated to Ravi Teja": start giving him a task.
+      if (!confirmRef.current && !flow.active() && !flow.messageActive() && flow.tryAllocateStatement(text)) return;
       // Plan and how-to questions skip the task, message and email flows ("how do I email an intern?" is not an email request).
       if (!confirmRef.current && !flow.active() && !flow.messageActive() && isKnowledgeQuestion(text)) return route(text);
       // "Tell Ravi …": a message to an intern. Taskora asks message or email before sending.
