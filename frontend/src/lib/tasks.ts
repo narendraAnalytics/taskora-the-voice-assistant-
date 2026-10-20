@@ -1,8 +1,8 @@
 import "server-only";
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { internInvites, standups, tasks, type TaskRow } from "@/db/schema";
-import { todayIST, type StandupView, type TaskView } from "@/lib/task-types";
+import { internInvites, organizerMessages, standups, tasks, type TaskRow } from "@/db/schema";
+import { todayIST, type MessageView, type StandupView, type TaskView } from "@/lib/task-types";
 
 export function toView(r: TaskRow): TaskView {
   const late = r.status !== "done" && r.dueDate !== null && r.dueDate < todayIST();
@@ -64,3 +64,20 @@ export async function listStandups(organizerId: string, limit = 30): Promise<Sta
     createdAt: r.createdAt.toISOString(),
   }));
 }
+
+async function messages(where: ReturnType<typeof eq>, limit: number): Promise<MessageView[]> {
+  const rows = await db
+    .select({ id: organizerMessages.id, inviteId: organizerMessages.inviteId, taskId: organizerMessages.taskId, taskTitle: tasks.title, body: organizerMessages.body, createdAt: organizerMessages.createdAt })
+    .from(organizerMessages)
+    .leftJoin(tasks, eq(tasks.id, organizerMessages.taskId))
+    .where(where)
+    .orderBy(desc(organizerMessages.createdAt))
+    .limit(limit);
+  return rows.map((r) => ({ id: r.id, inviteId: r.inviteId, taskId: r.taskId, taskTitle: r.taskTitle, text: r.body, createdAt: r.createdAt.toISOString() }));
+}
+
+/** Messages an intern received. Callers pass their own invite id only. */
+export const listMessagesForInvite = (inviteId: string, limit = 30) => messages(eq(organizerMessages.inviteId, inviteId), limit);
+
+/** Messages this organizer has sent (shown under the matching standup). */
+export const listMessagesForOrganizer = (organizerId: string, limit = 60) => messages(eq(organizerMessages.organizerId, organizerId), limit);

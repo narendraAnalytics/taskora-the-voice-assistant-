@@ -1,9 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { CalendarDays, Check, ClipboardList, GraduationCap, Languages, MessageSquarePlus, School, Send, Sparkles } from "lucide-react";
-import { postTaskUpdate } from "@/app/me/actions";
-import { fmtDue, UPDATE_STATUSES, type TaskView, type UpdateStatus } from "@/lib/task-types";
+import { useEffect, useRef, useState } from "react";
+import { CalendarDays, Check, ClipboardList, GraduationCap, Languages, MessageSquarePlus, MessagesSquare, School, Send, Sparkles } from "lucide-react";
+import { getMyMessages, postTaskUpdate } from "@/app/me/actions";
+import { agoText, fmtDue, UPDATE_STATUSES, type MessageView, type TaskView, type UpdateStatus } from "@/lib/task-types";
 import { STATUS_LABEL } from "@/lib/demo-data";
 import { StatusChip } from "@/components/dashboard/status-chip";
 import { Shell } from "@/components/dashboard/shell";
@@ -110,8 +110,23 @@ const choiceFor = (t: TaskView): UpdateStatus => (t.status === "todo" || t.statu
 type Sent = { id: number; task: string; status: UpdateStatus; text: string };
 
 /** `tasks` are this intern's own, loaded on the server from their own invite. */
-export function InternView({ name, profile, tasks: firstTasks = [] }: { name: string; profile?: InternProfile | null; tasks?: TaskView[] }) {
+export function InternView({ name, profile, tasks: firstTasks = [], messages: firstMessages = [] }: { name: string; profile?: InternProfile | null; tasks?: TaskView[]; messages?: MessageView[] }) {
   const reduce = useReducedMotion();
+  const [messages, setMessages] = useState(firstMessages);
+  // Messages the organizer sends while this page is open appear without a reload.
+  useEffect(() => {
+    const load = async () => {
+      if (document.visibilityState !== "visible") return;
+      const next = await getMyMessages().catch(() => null);
+      if (next) setMessages((cur) => (JSON.stringify(cur) === JSON.stringify(next) ? cur : next));
+    };
+    const t = window.setInterval(load, 15_000);
+    document.addEventListener("visibilitychange", load);
+    return () => {
+      window.clearInterval(t);
+      document.removeEventListener("visibilitychange", load);
+    };
+  }, []);
   const [tasks, setTasks] = useState(firstTasks);
   const open = tasks.filter((t) => t.status !== "done");
   const [taskId, setTaskId] = useState<string | null>((open[0] ?? tasks[0])?.id ?? null);
@@ -323,6 +338,29 @@ export function InternView({ name, profile, tasks: firstTasks = [] }: { name: st
         </PaperCard>
 
         <div className="flex flex-col gap-5 lg:col-span-5">
+          <PaperCard as="section" i={1} tilt={1.5} className="relative rounded-[2rem] bg-haldi p-5 sm:p-6">
+            <Tape className="-top-3 right-10" />
+            <div className="flex items-center gap-2.5">
+              <MessagesSquare className="size-6" aria-hidden />
+              <h2 className="font-hand text-4xl font-bold leading-none">From your organizer</h2>
+            </div>
+            {messages.length === 0 ? (
+              <p className="font-note mt-3 rounded-2xl bg-paper px-4 py-5 text-center text-moss">No messages yet. When your organizer writes to you, it shows up here.</p>
+            ) : (
+              <ul className="mt-4 max-h-96 space-y-3 overflow-y-auto pr-1" aria-live="polite">
+                {messages.slice(0, 10).map((m, n) => (
+                  <motion.li key={m.id} initial={reduce ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl bg-paper p-3.5 shadow-[0_3px_0_#173f3014]">
+                    {m.taskTitle && <p className="truncate text-xs font-bold text-moss">About: {m.taskTitle}</p>}
+                    <p className="font-note mt-0.5 whitespace-pre-line text-[1.02rem] leading-snug">{m.text}</p>
+                    <p suppressHydrationWarning className="mt-1.5 text-xs text-moss">
+                      {n === 0 ? "Newest · " : ""}
+                      {agoText(m.createdAt)}
+                    </p>
+                  </motion.li>
+                ))}
+              </ul>
+            )}
+          </PaperCard>
           {profile && <Placement p={profile} />}
           <PaperCard as="section" i={2} tilt={-2} className={card}>
             <div className="flex items-baseline justify-between">

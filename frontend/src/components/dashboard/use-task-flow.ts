@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, type RefObject } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { assignTask, emailTask } from "@/app/dashboard/task-actions";
+import { assignTask, emailTask, sendMessage } from "@/app/dashboard/task-actions";
 import type { Intern } from "@/lib/demo-data";
 import { findNames, isNo, isYes, matchInterns, words } from "@/lib/jarvis";
 import { fmtDue, PAST_DATE_ERROR, spokenDate, todayIST } from "@/lib/task-types";
@@ -35,6 +35,42 @@ export const looksLikeNewTask = (text: string) => {
 /** "email him", "mail Ravi the task", "send the task to Anjali by email". */
 const EMAIL_WORDS = /\be-?mail\b|\bmail\b|\bsend\b.*\b(task|it|him|her|them|details)\b/;
 export const looksLikeEmailRequest = (text: string) => EMAIL_WORDS.test(text.toLowerCase().replace(/[’']/g, ""));
+
+/** "tell Ravi to finish the login page", "send Anjali a message", "message him that the demo is at 5". */
+const MESSAGE_WORDS = /\b(tell|message|msg|ping|notify|remind)\b|\b(send|drop|leave|write)\b.*\b(message|note|msg)\b|\blet\b.*\bknow\b/;
+const NOT_MESSAGE = /\btell me\b|^(how|what|who|which|when|why|is|are|does|do|show|read)\b|\bsend\b.*\btask\b/;
+export const looksLikeMessageRequest = (text: string) => {
+  const t = text.toLowerCase().replace(/[’']/g, "");
+  return MESSAGE_WORDS.test(t) && !NOT_MESSAGE.test(t);
+};
+
+type Channel = "app" | "email" | "both";
+type MsgDraft = { stage: "who" | "which" | "text" | "channel"; internId?: string; text?: string; candidates?: string[] };
+
+/** The message part of the sentence: after "that / saying / :", else "to <do something>" after the name. */
+function messageText(original: string, who?: Intern): string {
+  const saying = original.match(/(?:\bsaying\b|\bthat\b|:)\s*(.+)$/i);
+  if (saying) return saying[1].trim();
+  let rest = "";
+  if (who) {
+    const lower = original.toLowerCase();
+    const alias = [who.name.toLowerCase(), ...who.aliases].filter((a) => lower.includes(a)).sort((a, b) => b.length - a.length)[0];
+    if (alias) rest = original.slice(lower.indexOf(alias) + alias.length);
+  }
+  if (!rest) rest = original.replace(/^.*?\b(him|her|them)\b/i, "");
+  rest = rest.replace(/^[\s,:-]+/, "").trim();
+  if (/^(a |an |the )?(message|note|msg)\b/i.test(rest) || /^(about|regarding)\b/i.test(rest)) return "";
+  if (/^to\s+/i.test(rest)) return `Please ${rest.slice(3).trim()}`;
+  return rest;
+}
+
+const channelFrom = (text: string): Channel | null => {
+  const t = words(text);
+  if (/\bboth\b/.test(t)) return "both";
+  if (/\be ?mail\b|\bmail\b/.test(t)) return "email";
+  if (/\b(message|messages|app|page|dashboard|workspace|chat|here|msg)\b/.test(t)) return "app";
+  return null;
+};
 
 /** Full name, e.g. "Ravi Teja", for every intern. */
 const shortName = (i: Intern, _all?: Intern[]) => i.name;
@@ -309,5 +345,122 @@ export function useTaskFlow({
     [askNext, cancel, getToken, internsRef, no, say, sendEmail, setCard, setChips, yes],
   );
 
-  return { tryHandle, tryEmail, start, yes, no, cancel, active: () => draft.current !== null };
+  /**
+   * "Tell Ravi …": a message to an intern. Fills who and what across turns, then always asks whether to send
+   * it as a message on their page or as an email (or both) before anything is sent.
+   */
+  const msg = useRef<MsgDraft | null>(null);
+
+  const askMessage = useCallback(
+    (d: MsgDraft, lead = "") => {
+      const all = internsRef.current ?? [];
+      const who = all.find((i) => i.id === d.internId);
+      const ask = (q: string, chips: string[] = []) => {
+        msg.current = d;
+        setChips(chips);
+        void say(`${lead}${q}`, [`${lead}${q}`], "question");
+      };
+      if (!who) {
+        d.stage = "who";
+        return ask("Who should I message?", all.slice(0, 4).map((i) => i.name));
+      }
+      if (!d.text) {
+        d.stage = "text";
+        return ask(`What should I say to ${shortName(who, all)}?`);
+      }
+      d.stage = "channel";
+      const shown = `Send "${d.text}" to ${shortName(who, all)} as a message on their page, or as an email?`;
+      const spoken = d.text.length > 90 ? `Your message to ${shortName(who, all)} is ready. Should I send it as a message on their page, or as an email?` : shown;
+      msg.current = d;
+      setChips(["Message", "Email", "Both", "Cancel"]);
+      void say(`${lead}${shown}`, [`${lead}${spoken}`], "question");
+    },
+    [internsRef, say, setChips],
+  );
+
+  const deliver = useCallback(
+    async (d: MsgDraft, channel: Channel) => {
+      const all = internsRef.current ?? [];
+      const who = all.find((i) => i.id === d.internId);
+      if (!who || !d.text) return;
+      const name = shortName(who, all);
+      if (channel !== "app" && !who.joined) {
+        return askMessage(d, `${name} hasn't joined yet, so I can't email. `);
+      }
+      msg.current = null;
+      const r = await sendMessage({ inviteId: who.id, taskId: null, text: d.text, channel }).catch(() => ({ ok: false as const, error: "I couldn't send that just now." }));
+      const text = r.ok
+        ? `${channel === "email" ? `Email sent to ${name}.` : channel === "both" ? `Sent to ${name} as a message and an email.` : `Message sent to ${name}. They will see it on their page.`} Anything else?`
+        : `${r.error} Anything else?`;
+      if (r.ok) onChange();
+      void say(text, [text], "question");
+    },
+    [askMessage, internsRef, onChange, say],
+  );
+
+  const messageActive = useCallback(() => msg.current !== null, []);
+
+  const tryMessage = useCallback(
+    async (text: string, lastId?: string): Promise<boolean> => {
+      const all = internsRef.current ?? [];
+      const t = words(text);
+      const d = msg.current;
+
+      if (d) {
+        if (isNo(text) || CANCEL.test(t)) {
+          msg.current = null;
+          setChips([]);
+          void say("Okay, I haven't sent anything. Anything else?", undefined, "question");
+          return true;
+        }
+        if (d.stage === "who" || d.stage === "which") {
+          const found = d.stage === "which" ? all.filter((i) => d.candidates?.includes(i.id) && t.includes(i.name.toLowerCase())) : findNames(all, text).map((x) => x.i);
+          const exact = found.filter((i) => t.includes(i.name.toLowerCase()));
+          const pool = exact.length ? exact : found;
+          if (pool.length === 1) askMessage({ ...d, internId: pool[0].id, candidates: undefined });
+          else if (pool.length > 1) {
+            msg.current = { ...d, stage: "which", candidates: pool.map((p) => p.id) };
+            setChips(pool.map((p) => p.name));
+            const q = `Which one: ${pool.map((p) => p.name).join(" or ")}?`;
+            void say(q, [q], "question");
+          } else askMessage(d, "I couldn't find that name. ");
+          return true;
+        }
+        if (d.stage === "text") {
+          askMessage({ ...d, text: text.trim().slice(0, 500) });
+          return true;
+        }
+        // channel
+        const ch = channelFrom(text);
+        if (!ch) {
+          void say("Say message, email, or both.", undefined, "question");
+          return true;
+        }
+        void deliver(d, ch);
+        return true;
+      }
+
+      // A new request. Find who, then what to say.
+      const named = findNames(all, text);
+      const exact = named.filter((x) => text.toLowerCase().includes(x.i.name.toLowerCase()));
+      const pool = (exact.length ? exact : named).map((x) => x.i);
+      if (pool.length > 1) {
+        msg.current = { stage: "which", candidates: pool.map((p) => p.id), text: messageText(text) || undefined };
+        setChips(pool.map((p) => p.name));
+        const q = `Which one: ${pool.map((p) => p.name).join(" or ")}?`;
+        void say(q, [q], "question");
+        return true;
+      }
+      const who = pool[0] ?? all.find((i) => i.id === lastId && /\b(him|her|them)\b/.test(t));
+      askMessage({ stage: "who", internId: who?.id, text: messageText(text, who) || undefined });
+      return true;
+    },
+    [askMessage, deliver, internsRef, say, setChips],
+  );
+
+  const cancelMessage = useCallback(() => {
+    msg.current = null;
+  }, []);
+
+  return { tryHandle, tryEmail, tryMessage, messageActive, cancelMessage, start, yes, no, cancel, active: () => draft.current !== null };
 }

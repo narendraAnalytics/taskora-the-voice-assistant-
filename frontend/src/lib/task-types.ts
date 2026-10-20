@@ -61,3 +61,13 @@ export function agoText(iso: string, now = Date.now()) {
   const d = Math.round(mins / 1440);
   return `${d} day${d > 1 ? "s" : ""} ago`;
 }
+
+/** A message from the organizer to an intern. `taskTitle` is null for a general message. */
+export type MessageView = {
+  id: string;
+  inviteId: string;
+  taskId: string | null;
+  taskTitle: string | null;
+  text: string;
+  createdAt: string;
+};

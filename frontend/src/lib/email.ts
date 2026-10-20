@@ -2,6 +2,7 @@ import "server-only";
 import { Resend } from "resend";
 import { InviteEmail, type InviteEmailProps } from "@/emails/invite-email";
 import { LoginEmail } from "@/emails/login-email";
+import { MessageEmail, type MessageEmailProps } from "@/emails/message-email";
 import { TaskEmail, type TaskEmailProps } from "@/emails/task-email";
 
 /** Must be an address on a domain verified in Resend, e.g. "Taskora <hello@buildflows.shop>". */
@@ -27,4 +28,9 @@ export function sendLoginEmail(to: string, name: string, url: string) {
 /** "New task" email, sent only when the organizer asks for it by voice. */
 export function sendTaskEmail(to: string, props: TaskEmailProps) {
   return send(to, `New task: ${props.title}`, TaskEmail(props));
+}
+
+/** An organizer's message, sent by email only when they choose email (or both). */
+export function sendMessageEmail(to: string, props: MessageEmailProps) {
+  return send(to, "A message from your organizer on Taskora", MessageEmail(props));
 }

@@ -3,12 +3,12 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { internInvites, taskEvents, tasks } from "@/db/schema";
+import { internInvites, organizerMessages, taskEvents, tasks } from "@/db/schema";
 import { BASE_URL } from "@/lib/base-url";
-import { sendTaskEmail } from "@/lib/email";
+import { sendMessageEmail, sendTaskEmail } from "@/lib/email";
 import { requireOrganizer } from "@/lib/session";
-import { fmtDue, PAST_DATE_ERROR, todayIST, type StandupView, type TaskResult, type TaskView } from "@/lib/task-types";
-import { listStandups, listTasksForOrganizer, toView } from "@/lib/tasks";
+import { fmtDue, PAST_DATE_ERROR, todayIST, type MessageView, type StandupView, type TaskResult, type TaskView } from "@/lib/task-types";
+import { listMessagesForOrganizer, listStandups, listTasksForOrganizer, toView } from "@/lib/tasks";
 
 /** An intern on this organizer's batch who can still receive work (invited or joined). */
 async function ownInvite(organizerId: string, inviteId: string) {
@@ -84,4 +84,51 @@ export async function emailTask(taskId: string): Promise<{ ok: true } | { ok: fa
 export async function getStandups(): Promise<StandupView[]> {
   const s = await requireOrganizer();
   return listStandups(s.userId);
+}
+
+const messageSchema = z.object({
+  inviteId: z.uuid(),
+  taskId: z.uuid().nullable(),
+  text: z.string().trim().min(1, "Write a message first.").max(500, "Keep it under 500 characters."),
+  channel: z.enum(["app", "email", "both"]).default("app"),
+});
+
+export type SendMessageResult = { ok: true; message: MessageView | null; emailed: boolean } | { ok: false; error: string };
+
+/**
+ * Message an intern on this batch. "app" shows it on their page (the default), "email" only mails it,
+ * "both" does both. Email needs a joined intern, because the link needs their account.
+ */
+export async function sendMessage(input: { inviteId: string; taskId: string | null; text: string; channel?: "app" | "email" | "both" }): Promise<SendMessageResult> {
+  const s = await requireOrganizer();
+  const parsed = messageSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Check your message." };
+  const { inviteId, taskId, text, channel } = parsed.data;
+  const invite = await ownInvite(s.userId, inviteId);
+  if (!invite) return { ok: false, error: "That intern is not on your batch." };
+  let taskTitle: string | null = null;
+  if (taskId) {
+    const t = await ownTask(s.userId, taskId);
+    if (!t || t.inviteId !== inviteId) return { ok: false, error: "That task is not theirs." };
+    taskTitle = t.title;
+  }
+  const name = invite.name ?? invite.email;
+  if (channel !== "app" && invite.status !== "joined") {
+    return { ok: false, error: `${name} hasn't joined yet, so I can't email. A message will show on their page once they sign in.` };
+  }
+  let emailed = false;
+  if (channel !== "app") {
+    const error = await sendMessageEmail(invite.email, { name, text, url: `${BASE_URL}/me` });
+    if (error) return { ok: false, error };
+    emailed = true;
+  }
+  if (channel === "email") return { ok: true, message: null, emailed };
+  const [row] = await db.insert(organizerMessages).values({ inviteId, organizerId: s.userId, taskId, body: text }).returning();
+  return { ok: true, message: { id: row.id, inviteId, taskId, taskTitle, text, createdAt: row.createdAt.toISOString() }, emailed };
+}
+
+/** The messages this organizer sent, newest first. */
+export async function getSentMessages(): Promise<MessageView[]> {
+  const s = await requireOrganizer();
+  return listMessagesForOrganizer(s.userId);
 }

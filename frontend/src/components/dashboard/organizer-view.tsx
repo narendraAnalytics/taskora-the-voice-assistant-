@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MessageSquareText, PartyPopper } from "lucide-react";
+import { Mail, MessageSquareText, PartyPopper, Reply, Send } from "lucide-react";
 import { getInvites } from "@/app/dashboard/actions";
-import { getStandups, getTasks, reassignTask } from "@/app/dashboard/task-actions";
-import { fmtDue, type StandupView, type TaskView } from "@/lib/task-types";
+import { getSentMessages, getStandups, getTasks, reassignTask, sendMessage } from "@/app/dashboard/task-actions";
+import { fmtDue, type MessageView, type StandupView, type TaskView } from "@/lib/task-types";
 import { StatCards } from "@/components/dashboard/stat-cards";
 import { STATUS_LABEL, type Intern, type Status } from "@/lib/demo-data";
 import type { Invite } from "@/app/dashboard/actions";
@@ -82,7 +82,72 @@ function fromInvites(invites: Invite[], tasks: TaskView[], notes: StandupView[])
     });
 }
 
-export function OrganizerView({ invites, tasks: firstTasks, standups: firstStandups }: { name?: string; invites: Invite[]; tasks: TaskView[]; standups: StandupView[] }) {
+/** Reply to an intern from their standup note: a message on their page, optionally also by email. */
+function ReplyBox({ s, onSent, joined }: { s: StandupView; onSent: (m: MessageView) => void; joined: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [mail, setMail] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const blocked = s.status === "blocked";
+  const send = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!text.trim() || busy) return;
+    setBusy(true);
+    setError("");
+    const r = await sendMessage({ inviteId: s.inviteId, taskId: s.taskId, text: text.trim(), channel: mail ? "both" : "app" }).catch(() => ({ ok: false as const, error: "Could not send. Try again." }));
+    setBusy(false);
+    if (!r.ok) return setError(r.error);
+    if (r.message) onSent(r.message);
+    setText("");
+    setOpen(false);
+  };
+  if (!open)
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={cn("mt-2.5 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ring-2 transition-colors", blocked ? "ring-paper hover:bg-paper hover:text-neem" : "ring-neem hover:bg-haldi")}
+      >
+        <Reply className="size-3.5" aria-hidden /> Reply
+      </button>
+    );
+  return (
+    <form onSubmit={send} className="mt-2.5 space-y-2">
+      <textarea
+        autoFocus
+        value={text}
+        onChange={(e) => setText(e.target.value.slice(0, 500))}
+        rows={2}
+        placeholder={"Write to " + s.internName.split(" ")[0] + "…"}
+        aria-label={"Message to " + s.internName}
+        className="font-note w-full resize-none rounded-xl bg-neem p-2.5 text-sm text-paper placeholder:text-sage/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-haldi"
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="submit" disabled={busy || !text.trim()} className="inline-flex items-center gap-1.5 rounded-full bg-saffron px-3.5 py-1.5 text-sm font-bold text-neem disabled:opacity-50">
+          {busy ? "Sending…" : "Send message"} <Send className="size-3.5" aria-hidden />
+        </button>
+        {joined && (
+          <label className={cn("inline-flex cursor-pointer items-center gap-1.5 text-xs font-bold", blocked ? "text-paper" : "text-neem")}>
+            <input type="checkbox" checked={mail} onChange={(e) => setMail(e.target.checked)} className="size-3.5 accent-saffron" />
+            <Mail className="size-3.5" aria-hidden /> Also email
+          </label>
+        )}
+        <button type="button" onClick={() => setOpen(false)} className="text-xs font-semibold underline">
+          Cancel
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="text-xs font-semibold">
+          {error}
+        </p>
+      )}
+    </form>
+  );
+}
+
+export function OrganizerView({ invites, tasks: firstTasks, standups: firstStandups, messages: firstMessages = [] }: { name?: string; invites: Invite[]; tasks: TaskView[]; standups: StandupView[]; messages?: MessageView[] }) {
+  const [sent, setSent] = useState(firstMessages);
   const [list, setList] = useState(invites);
   const [taskList, setTaskList] = useState(firstTasks);
   // The board is always derived from the real invites and tasks, so it follows every change.
@@ -94,7 +159,8 @@ export function OrganizerView({ invites, tasks: firstTasks, standups: firstStand
   const reduce = useReducedMotion();
 
   const refreshTasks = useCallback(async () => {
-    const [next, notes] = await Promise.all([getTasks().catch(() => null), getStandups().catch(() => null)]);
+    const [next, notes, out] = await Promise.all([getTasks().catch(() => null), getStandups().catch(() => null), getSentMessages().catch(() => null)]);
+    if (out) setSent((cur) => (JSON.stringify(cur) === JSON.stringify(out) ? cur : out));
     if (next) setTaskList((cur) => (JSON.stringify(cur) === JSON.stringify(next) ? cur : next));
     if (notes) {
       const fresh = notes.filter((s) => !seenStandups.current.has(s.id));
@@ -318,6 +384,15 @@ export function OrganizerView({ invites, tasks: firstTasks, standups: firstStand
                   <StatusChip status={s.status} />
                 </p>
                 <p className="font-note mt-2 text-[1.02rem] leading-snug">“{s.text}”</p>
+                {sent
+                  .filter((m) => m.inviteId === s.inviteId && m.taskId === s.taskId && m.createdAt > s.createdAt && !(standups.find((x) => x.inviteId === s.inviteId && x.taskId === s.taskId && x.createdAt > s.createdAt && x.createdAt <= m.createdAt)))
+                  .map((m) => (
+                    <p key={m.id} className={cn("font-note mt-2 rounded-xl px-3 py-2 text-sm leading-snug", s.status === "blocked" ? "bg-neem text-paper" : "bg-haldi")}>
+                      <span className="font-bold">You: </span>
+                      {m.text}
+                    </p>
+                  ))}
+                <ReplyBox s={s} joined={list.find((i) => i.id === s.inviteId)?.status === "joined"} onSent={(m) => setSent((cur) => [m, ...cur])} />
               </motion.li>
             ))}
           </ul>

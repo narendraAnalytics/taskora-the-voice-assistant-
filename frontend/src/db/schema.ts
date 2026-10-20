@@ -101,3 +101,17 @@ export const standups = pgTable("standups", {
   status: text("status").$type<"todo" | "progress" | "blocked" | "done">().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** A message the organizer sends an intern (shown on the intern's page; optionally about one task). */
+export const organizerMessages = pgTable("organizer_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  inviteId: uuid("invite_id")
+    .notNull()
+    .references(() => internInvites.id, { onDelete: "cascade" }),
+  organizerId: text("organizer_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  taskId: uuid("task_id").references(() => tasks.id, { onDelete: "set null" }),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

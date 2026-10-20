@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { currentInternInvite, getInternSession, getSession } from "@/lib/session";
-import { listTasksForInvite } from "@/lib/tasks";
+import { listMessagesForInvite, listTasksForInvite } from "@/lib/tasks";
 import { InternView } from "@/components/dashboard/intern-view";
 import { DashboardLoading } from "@/components/dashboard/loading";
 
@@ -15,7 +15,8 @@ async function Gate() {
       ? { position: i.position, college: i.college, degree: i.degree, studyYear: i.studyYear, months: i.durationMonths, startDate: i.startDate, language: i.language, skills: i.skills }
       : null;
     const tasks = i ? await listTasksForInvite(i.id) : [];
-    return <InternView name={intern.name} profile={profile} tasks={tasks} />;
+    const messages = i ? await listMessagesForInvite(i.id) : [];
+    return <InternView name={intern.name} profile={profile} tasks={tasks} messages={messages} />;
   }
   // No intern session here. An organizer signed in to Clerk in this same browser must not land on their own
   // dashboard when they open an intern's link: send everyone without an intern session to intern sign-in.

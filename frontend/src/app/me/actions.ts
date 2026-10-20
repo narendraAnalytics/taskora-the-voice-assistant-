@@ -5,8 +5,8 @@ import { z } from "zod";
 import { db } from "@/db";
 import { standups, taskEvents, tasks } from "@/db/schema";
 import { currentInternInvite } from "@/lib/session";
-import { UPDATE_STATUSES, type TaskView } from "@/lib/task-types";
-import { toView } from "@/lib/tasks";
+import { UPDATE_STATUSES, type MessageView, type TaskView } from "@/lib/task-types";
+import { listMessagesForInvite, toView } from "@/lib/tasks";
 
 const updateSchema = z.object({
   taskId: z.uuid(),
@@ -42,4 +42,10 @@ export async function postTaskUpdate(input: { taskId: string; text: string; stat
     data: { from: task.status, to: status, text },
   });
   return { ok: true, task: { ...toView(row), note: text } };
+}
+
+/** The signed-in intern's own messages from their organizer (polled by the intern page). */
+export async function getMyMessages(): Promise<MessageView[]> {
+  const found = await currentInternInvite();
+  return found ? listMessagesForInvite(found.invite.id) : [];
 }

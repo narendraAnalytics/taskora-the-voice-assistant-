@@ -10,7 +10,7 @@ import { CallScreen, STATUS, ThinkingDots, UndoPill } from "@/components/dashboa
 import { useSpeech } from "@/lib/use-speech";
 import { closingKind, goodbye, greeting, isNo, isRepeat, isWait, isYes, respond, SUGGESTIONS, type Ctx, type Reply } from "@/lib/jarvis";
 import type { Intern } from "@/lib/demo-data";
-import { looksLikeEmailRequest, looksLikeNewTask, useTaskFlow, type TaskCard } from "@/components/dashboard/use-task-flow";
+import { looksLikeEmailRequest, looksLikeMessageRequest, looksLikeNewTask, useTaskFlow, type TaskCard } from "@/components/dashboard/use-task-flow";
 
 type Msg = { from: "you" | "taskora"; text: string };
 type Pending = Extract<Reply, { kind: "clarify" }>;
@@ -148,6 +148,11 @@ export function Jarvis({
         if (looksLikeEmailRequest(text)) void flow.tryEmail(text, convo.current.lastId);
         else route(text);
       };
+      // "Tell Ravi …": a message to an intern. Taskora asks message or email before sending.
+      if (!confirmRef.current && !flow.active() && (flow.messageActive() || looksLikeMessageRequest(text))) {
+        void flow.tryMessage(text, convo.current.lastId);
+        return;
+      }
       if (!confirmRef.current && (flow.active() || looksLikeNewTask(text))) {
         void flow.tryHandle(text).then((handled) => {
           if (!handled) emailOrRoute();
@@ -310,6 +315,7 @@ export function Jarvis({
     setChips(SUGGESTIONS);
     setConfirmBoth(null);
     flow.cancel();
+    flow.cancelMessage();
     pendingRef.current = null;
     convo.current = {};
     last.current = null;
