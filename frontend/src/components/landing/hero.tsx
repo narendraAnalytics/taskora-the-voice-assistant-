@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { pilotMailto } from "@/lib/site";
 import { LiquidButton, LiquidGooDefs } from "./liquid-button";
+import { TutorialDialog } from "./tutorial-dialog";
 
 // Cream and leaf tones that sit naturally on the jasmine in the office footage.
 const PETAL_COLORS = ["#fdf0cc", "#fce7b2", "#fdf0cc", "#7dbe8f", "#f2b33d"];
@@ -61,6 +62,7 @@ export function Hero() {
   const [replaying, setReplaying] = useState(false);
   const [sound, setSound] = useState(false);
   const skipRef = useRef<HTMLButtonElement>(null);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
 
   /* The intro autoplays muted (browsers block sound without a gesture); this click unmutes it. */
   const toggleSound = useCallback(() => {
@@ -252,7 +254,7 @@ export function Hero() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Enter" || !readyRef.current) return;
       const t = e.target as HTMLElement | null;
-      if (t && t.closest("a, button, input, textarea, select, [contenteditable]")) return;
+      if (t && t.closest("a, button, input, textarea, select, video, [role=dialog], [contenteditable]")) return;
       celebrate();
     };
     document.addEventListener("keydown", onKey);
@@ -397,9 +399,18 @@ export function Hero() {
               >
                 Join the pilot
               </LiquidButton>
-              <LiquidButton href="#commands" variant="outline">
+              <LiquidButton
+                href="#commands"
+                variant="outline"
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey || e.shiftKey) return;
+                  e.preventDefault();
+                  setTutorialOpen(true);
+                }}
+              >
                 See what you can say
               </LiquidButton>
+              <TutorialDialog open={tutorialOpen} onOpenChange={setTutorialOpen} />
             </div>
           </div>
         </div>

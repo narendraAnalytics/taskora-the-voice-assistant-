@@ -61,3 +61,6 @@ venv/
 # ---- Video (rendered locally, not committed) ----
 *.mp4
 
+
+# ---- Tutorial video project (Remotion, not committed) ----
+remotionvideo/
